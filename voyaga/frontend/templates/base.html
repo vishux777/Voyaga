@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Voyaga — Travel Reimagined{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+{% load static %}
+<link rel="stylesheet" href="{% static 'css/main.css' %}">
+</head>
+<body>
+
+<nav class="navbar" id="navbar">
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-orb"></div>
+      <span class="logo-text">Voyaga</span>
+    </a>
+    <div class="nav-links">
+      <a href="/" class="nav-link" data-page="home">Explore</a>
+      <a href="/properties" class="nav-link" data-page="properties">Stays</a>
+      <a href="/about" class="nav-link">About</a>
+    </div>
+    <div class="nav-actions" id="navActions">
+      <button class="btn-ghost" onclick="showModal('loginModal')">Sign in</button>
+      <button class="btn-primary" onclick="showModal('registerModal')">Join Free</button>
+    </div>
+    <div class="nav-user hidden" id="navUser">
+      <div class="wallet-badge" id="walletBadge">
+        <span class="wallet-icon">◈</span>
+        <span id="walletAmount">$0</span>
+      </div>
+      <div class="user-menu" id="userMenuBtn">
+  <div class="avatar-circle" id="userAvatar" onclick="toggleDropdown()">G</div>
+  <div class="user-dropdown" id="userDropdown">
+    <a href="/dashboard">Dashboard</a>
+    <a href="/bookings">My Bookings</a>
+    <a href="/profile">Profile</a>
+    <hr>
+    <a href="#" onclick="logout()">Sign Out</a>
+  </div>
+</div>
+    </div>
+  </div>
+</nav>
+
+<main id="appContent">
+  {% block content %}{% endblock %}
+</main>
+
+<!-- AI Chat Bubble -->
+<div class="chat-bubble" id="chatBubble" onclick="toggleChat()">
+  <div class="chat-bubble-ring"></div>
+  <div class="chat-bubble-ring ring2"></div>
+  <div class="ai-orb">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" fill="currentColor" opacity="0.3"/>
+      <circle cx="12" cy="12" r="3" fill="currentColor"/>
+      <path d="M12 1 L12 4 M12 20 L12 23 M1 12 L4 12 M20 12 L23 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <span class="chat-label">Voya AI</span>
+</div>
+
+<!-- AI Chat Panel -->
+<div class="chat-panel hidden" id="chatPanel">
+  <div class="chat-header">
+    <div class="chat-ai-identity">
+      <div class="chat-ai-orb">
+        <div class="pulse-ring"></div>
+        <div class="pulse-ring ring2"></div>
+        <span>✦</span>
+      </div>
+      <div>
+        <div class="chat-ai-name">Voya</div>
+        <div class="chat-ai-status">AI Travel Assistant · Online</div>
+      </div>
+    </div>
+    <button onclick="toggleChat()" class="chat-close">✕</button>
+  </div>
+  <div class="chat-messages" id="chatMessages">
+    <div class="chat-msg ai">
+      <div class="msg-bubble">
+        Hello! I'm <strong>Voya</strong>, your AI travel companion. I can help you discover perfect stays, plan your trip, or answer any questions. Where shall we go? ✈️
+      </div>
+    </div>
+  </div>
+  <div class="chat-input-area">
+    <div class="thinking-indicator hidden" id="thinkingIndicator">
+      <span></span><span></span><span></span>
+    </div>
+    <div class="chat-input-row">
+      <input type="text" id="chatInput" placeholder="Ask anything about travel..." onkeydown="if(event.key==='Enter')sendChat()">
+      <button onclick="sendChat()" class="chat-send">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="chat-suggestions">
+      <button onclick="quickChat('Find me a luxury villa')">🏖️ Luxury villas</button>
+      <button onclick="quickChat('What are budget-friendly options?')">💰 Budget stays</button>
+      <button onclick="quickChat('How does booking work?')">📋 How to book</button>
+    </div>
+  </div>
+</div>
+
+<!-- Login Modal -->
+<div class="modal-overlay hidden" id="loginModal">
+  <div class="modal">
+    <button class="modal-close" onclick="hideModal('loginModal')">✕</button>
+    <div class="modal-header">
+      <div class="modal-logo">◈</div>
+      <h2>Welcome Back</h2>
+      <p>Sign in to your Voyaga account</p>
+    </div>
+    <form id="loginForm" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="loginEmail" required placeholder="your@email.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="loginPassword" required placeholder="••••••••">
+      </div>
+      <div id="loginError" class="form-error hidden"></div>
+      <button type="submit" class="btn-primary w-full" id="loginBtn">Sign In</button>
+    </form>
+    <p class="modal-footer">No account? <a href="#" onclick="switchModal('loginModal','registerModal')">Join free →</a></p>
+  </div>
+</div>
+
+<!-- Register Modal -->
+<div class="modal-overlay hidden" id="registerModal">
+  <div class="modal">
+    <button class="modal-close" onclick="hideModal('registerModal')">✕</button>
+    <div class="modal-header">
+      <div class="modal-logo">◈</div>
+      <h2>Join Voyaga</h2>
+      <p>Create your free account</p>
+    </div>
+    <form id="registerForm" onsubmit="handleRegister(event)">
+      <div class="form-row">
+        <div class="form-group">
+          <label>First Name</label>
+          <input type="text" id="regFirst" required placeholder="Jane">
+        </div>
+        <div class="form-group">
+          <label>Last Name</label>
+          <input type="text" id="regLast" required placeholder="Doe">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="regUsername" required placeholder="janedoe">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="regEmail" required placeholder="your@email.com">
+      </div>
+      <div class="form-group">
+        <label>I want to</label>
+        <select id="regRole">
+          <option value="guest">Book stays (Guest)</option>
+          <option value="host">List my property (Host)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="regPassword" required placeholder="Min. 8 characters" minlength="8">
+      </div>
+      <div class="form-group">
+        <label>Confirm Password</label>
+        <input type="password" id="regPassword2" required placeholder="Repeat password">
+      </div>
+      <div id="registerError" class="form-error hidden"></div>
+      <div id="registerSuccess" class="form-success hidden"></div>
+      <button type="submit" class="btn-primary w-full" id="registerBtn">Create Account</button>
+    </form>
+    <p class="modal-footer">Have an account? <a href="#" onclick="switchModal('registerModal','loginModal')">Sign in →</a></p>
+  </div>
+</div>
+
+<div class="toast hidden" id="toast"></div>
+
+<script src="{% static 'js/app.js' %}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

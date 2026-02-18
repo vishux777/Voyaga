@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% block title %}Browse Stays — Voyaga{% endblock %}
+{% block content %}
+
+<div class="page-layout">
+  <aside class="filters-sidebar">
+    <div class="filter-header">
+      <h3>Filters</h3>
+      <button onclick="clearFilters()" class="clear-btn">Clear all</button>
+    </div>
+
+    <div class="filter-group">
+      <label>Search</label>
+      <div class="search-input-wrap">
+        <input type="text" id="filterSearch" placeholder="City, title..." oninput="debounceFilter()">
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <label>Property Type</label>
+      <div class="checkbox-group">
+        <label class="check-item"><input type="checkbox" value="villa" class="filter-type"> Villa</label>
+        <label class="check-item"><input type="checkbox" value="apartment" class="filter-type"> Apartment</label>
+        <label class="check-item"><input type="checkbox" value="house" class="filter-type"> House</label>
+        <label class="check-item"><input type="checkbox" value="cabin" class="filter-type"> Cabin</label>
+        <label class="check-item"><input type="checkbox" value="studio" class="filter-type"> Studio</label>
+        <label class="check-item"><input type="checkbox" value="penthouse" class="filter-type"> Penthouse</label>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <label>Price Range (per night)</label>
+      <div class="price-inputs">
+        <input type="number" id="filterMinPrice" placeholder="Min $" oninput="debounceFilter()">
+        <span>—</span>
+        <input type="number" id="filterMaxPrice" placeholder="Max $" oninput="debounceFilter()">
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <label>Min Guests</label>
+      <input type="number" id="filterGuests" placeholder="Any" min="1" oninput="debounceFilter()">
+    </div>
+
+    <div class="filter-group">
+      <label>Sort By</label>
+      <select id="filterSort" onchange="applyFilters()">
+        <option value="-created_at">Newest First</option>
+        <option value="price_per_night">Price: Low to High</option>
+        <option value="-price_per_night">Price: High to Low</option>
+        <option value="title">Name A–Z</option>
+      </select>
+    </div>
+
+    <button class="btn-primary w-full" onclick="applyFilters()">Apply Filters</button>
+  </aside>
+
+  <div class="content-main">
+    <div class="content-header">
+      <div>
+        <h1 class="page-title">Browse Stays</h1>
+        <p id="resultCount" class="result-count">Loading...</p>
+      </div>
+      <div class="view-toggle">
+        <button class="view-btn active" id="gridViewBtn" onclick="setView('grid')">⊞</button>
+        <button class="view-btn" id="listViewBtn" onclick="setView('list')">☰</button>
+      </div>
+    </div>
+    <div class="properties-grid" id="propertiesGrid">
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+let currentPage = 1;
+let debounceTimer;
+
+function debounceFilter() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(applyFilters, 400);
+}
+
+function applyFilters(page = 1) {
+  currentPage = page;
+  const params = new URLSearchParams();
+  const search = document.getElementById('filterSearch').value;
+  const minPrice = document.getElementById('filterMinPrice').value;
+  const maxPrice = document.getElementById('filterMaxPrice').value;
+  const guests = document.getElementById('filterGuests').value;
+  const sort = document.getElementById('filterSort').value;
+  const types = [...document.querySelectorAll('.filter-type:checked')].map(c => c.value);
+
+  if (search) params.append('search', search);
+  if (minPrice) params.append('min_price', minPrice);
+  if (maxPrice) params.append('max_price', maxPrice);
+  if (guests) params.append('guests', guests);
+  if (sort) params.append('sort', sort);
+  if (types.length === 1) params.append('type', types[0]);
+  params.append('page', page);
+
+  loadProperties(params);
+}
+
+async function loadProperties(params) {
+  const grid = document.getElementById('propertiesGrid');
+  grid.innerHTML = Array(6).fill('<div class="skeleton-card"></div>').join('');
+  const data = await api('/api/properties/?' + params, 'GET', null, true);
+  if (!data) return;
+  document.getElementById('resultCount').textContent = `${data.count} stays found`;
+  grid.innerHTML = data.results.length
+    ? data.results.map(p => propertyCard(p)).join('')
+    : '<div class="empty-state-full"><span>🏜️</span><p>No properties match your criteria</p></div>';
+  renderPagination(data);
+}
+
+function renderPagination(data) {
+  const pag = document.getElementById('pagination');
+  const totalPages = Math.ceil(data.count / 12);
+  if (totalPages <= 1) { pag.innerHTML = ''; return; }
+  let html = '';
+  if (data.previous) html += `<button onclick="applyFilters(${currentPage-1})">← Prev</button>`;
+  html += `<span class="page-info">Page ${currentPage} of ${totalPages}</span>`;
+  if (data.next) html += `<button onclick="applyFilters(${currentPage+1})">Next →</button>`;
+  pag.innerHTML = html;
+}
+
+function clearFilters() {
+  document.getElementById('filterSearch').value = '';
+  document.getElementById('filterMinPrice').value = '';
+  document.getElementById('filterMaxPrice').value = '';
+  document.getElementById('filterGuests').value = '';
+  document.querySelectorAll('.filter-type').forEach(c => c.checked = false);
+  applyFilters();
+}
+
+function setView(v) {
+  const grid = document.getElementById('propertiesGrid');
+  document.getElementById('gridViewBtn').classList.toggle('active', v === 'grid');
+  document.getElementById('listViewBtn').classList.toggle('active', v === 'list');
+  grid.className = v === 'list' ? 'properties-list' : 'properties-grid';
+}
+
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('city')) document.getElementById('filterSearch').value = urlParams.get('city');
+applyFilters();
+</script>
+{% endblock %}

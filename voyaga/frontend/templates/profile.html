@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+{% block title %}Profile — Voyaga{% endblock %}
+{% block content %}
+
+<div class="page-container">
+  <div class="profile-wrap">
+    <div class="profile-header">
+      <div class="profile-avatar-big" id="profileAvatar">?</div>
+      <div>
+        <h1 class="profile-name" id="profileName">Loading...</h1>
+        <p class="profile-role" id="profileRole"></p>
+        <p class="profile-email" id="profileEmail"></p>
+      </div>
+    </div>
+
+    <div class="profile-body">
+      <div class="profile-section">
+        <h3>Edit Profile</h3>
+        <form id="profileForm" onsubmit="saveProfile(event)">
+          <div class="form-row">
+            <div class="form-group">
+              <label>First Name</label>
+              <input type="text" id="pfFirst" placeholder="First name">
+            </div>
+            <div class="form-group">
+              <label>Last Name</label>
+              <input type="text" id="pfLast" placeholder="Last name">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input type="text" id="pfPhone" placeholder="+1 234 567 8900">
+          </div>
+          <div class="form-group">
+            <label>Bio</label>
+            <textarea id="pfBio" rows="3" placeholder="Tell us about yourself..."></textarea>
+          </div>
+          <div id="profileMsg" class="form-success hidden"></div>
+          <button type="submit" class="btn-primary" id="saveBtn">Save Changes</button>
+        </form>
+      </div>
+
+      <div class="profile-section">
+        <h3>Wallet</h3>
+        <div class="wallet-card">
+          <div class="wallet-bal-label">Current Balance</div>
+          <div class="wallet-bal-amount" id="profileWallet">$0.00</div>
+          <div class="topup-amounts" style="margin-top:1rem;">
+            <button onclick="quickTopup(50)">+ $50</button>
+            <button onclick="quickTopup(100)">+ $100</button>
+            <button onclick="quickTopup(200)">+ $200</button>
+            <button onclick="quickTopup(500)">+ $500</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <h3>Transaction History</h3>
+        <div id="transactionList">Loading...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.profile-wrap { max-width: 800px; margin: 0 auto; padding-top: 2rem; }
+.profile-header { display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2.5rem; padding: 2rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); }
+.profile-avatar-big { width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--gold)); display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 700; color: white; flex-shrink: 0; }
+.profile-name { font-size: 1.6rem; margin-bottom: 4px; }
+.profile-role { color: var(--gold); font-size: 0.85rem; text-transform: capitalize; margin-bottom: 2px; }
+.profile-email { color: var(--text2); font-size: 0.88rem; }
+.profile-body { display: flex; flex-direction: column; gap: 1.5rem; }
+.profile-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); padding: 1.5rem; }
+.profile-section h3 { font-size: 1rem; margin-bottom: 1.2rem; color: var(--text); }
+.wallet-card { text-align: center; padding: 1rem; }
+.wallet-bal-label { font-size: 0.8rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; }
+.wallet-bal-amount { font-size: 2.5rem; font-family: 'Playfair Display', serif; color: var(--gold); margin: 0.25rem 0; }
+.tx-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+.tx-row:last-child { border-bottom: none; }
+.tx-desc { color: var(--text2); flex: 1; }
+.tx-date { color: var(--text2); font-size: 0.75rem; margin: 0 1rem; }
+.tx-amount { font-weight: 600; }
+.tx-amount.positive { color: var(--green); }
+.tx-amount.negative { color: var(--red); }
+</style>
+
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadProfile() {
+  if (!getToken()) { window.location.href = '/'; return; }
+
+  const [user, wallet, txData] = await Promise.all([
+    api('/api/auth/profile/'),
+    api('/api/payments/wallet/'),
+    api('/api/payments/transactions/')
+  ]);
+
+  if (user) {
+    document.getElementById('profileAvatar').textContent = (user.first_name?.[0] || user.email[0]).toUpperCase();
+    document.getElementById('profileName').textContent = `${user.first_name} ${user.last_name}`.trim() || user.username;
+    document.getElementById('profileRole').textContent = '✦ ' + user.role;
+    document.getElementById('profileEmail').textContent = user.email;
+    document.getElementById('pfFirst').value = user.first_name || '';
+    document.getElementById('pfLast').value = user.last_name || '';
+    document.getElementById('pfPhone').value = user.phone || '';
+    document.getElementById('pfBio').value = user.bio || '';
+  }
+
+  if (wallet) {
+    document.getElementById('profileWallet').textContent = '$' + wallet.balance.toFixed(2);
+  }
+
+  if (txData && txData.results) {
+    const list = document.getElementById('transactionList');
+    if (!txData.results.length) {
+      list.innerHTML = '<p class="empty-state">No transactions yet.</p>';
+    } else {
+      list.innerHTML = txData.results.slice(0, 10).map(t => `
+        <div class="tx-row">
+          <span class="tx-desc">${t.description}</span>
+          <span class="tx-date">${new Date(t.created_at).toLocaleDateString()}</span>
+          <span class="tx-amount ${parseFloat(t.amount) >= 0 ? 'positive' : 'negative'}">
+            ${parseFloat(t.amount) >= 0 ? '+' : ''}$${Math.abs(parseFloat(t.amount)).toFixed(2)}
+          </span>
+        </div>`).join('');
+    }
+  }
+}
+
+async function saveProfile(e) {
+  e.preventDefault();
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  const result = await api('/api/auth/profile/', 'PATCH', {
+    first_name: document.getElementById('pfFirst').value,
+    last_name: document.getElementById('pfLast').value,
+    phone: document.getElementById('pfPhone').value,
+    bio: document.getElementById('pfBio').value,
+  });
+
+  btn.disabled = false; btn.textContent = 'Save Changes';
+
+  if (result) {
+    localStorage.setItem('voyaga_user', JSON.stringify(result));
+    const msg = document.getElementById('profileMsg');
+    msg.textContent = 'Profile updated successfully!';
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 3000);
+    showToast('Profile saved!', 'success');
+  }
+}
+
+async function quickTopup(amount) {
+  const result = await api('/api/payments/wallet/topup/', 'POST', { amount });
+  if (result) {
+    document.getElementById('profileWallet').textContent = '$' + result.new_balance.toFixed(2);
+    document.getElementById('walletAmount').textContent = '$' + result.new_balance.toFixed(2);
+    showToast(result.message, 'success');
+  }
+}
+
+loadProfile();
+</script>
+{% endblock %}

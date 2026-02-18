@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard — Voyaga{% endblock %}
+{% block content %}
+
+<div class="dashboard-layout">
+  <aside class="dash-sidebar">
+    <nav class="dash-nav">
+      <a href="/dashboard" class="dash-link active" data-view="overview">
+        <span>⬡</span> Overview
+      </a>
+      <a href="/bookings" class="dash-link" data-view="bookings">
+        <span>📋</span> My Bookings
+      </a>
+      <a href="/profile" class="dash-link" data-view="profile">
+        <span>👤</span> Profile
+      </a>
+      <div id="hostLinks" class="hidden">
+        <div class="dash-divider">Host Tools</div>
+        <a href="/host/listings" class="dash-link" data-view="listings">
+          <span>🏠</span> My Listings
+        </a>
+        <a href="/host/bookings" class="dash-link" data-view="hostBookings">
+          <span>🗓️</span> Guest Bookings
+        </a>
+        <a href="/host/new" class="dash-link" data-view="newListing">
+          <span>➕</span> Add Listing
+        </a>
+      </div>
+    </nav>
+  </aside>
+
+  <div class="dash-content" id="dashContent">
+    <div class="dash-welcome" id="welcomeView">
+      <h1>Welcome back, <span id="dashUserName">Traveler</span> ✦</h1>
+      <div class="dash-cards">
+        <div class="dash-card">
+          <div class="dash-card-icon">💳</div>
+          <div class="dash-card-val" id="walletVal">$0</div>
+          <div class="dash-card-label">Wallet Balance</div>
+          <button class="btn-sm" onclick="showTopup()">Top Up</button>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-icon">✈️</div>
+          <div class="dash-card-val" id="bookingCount">0</div>
+          <div class="dash-card-label">Total Bookings</div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-icon">⭐</div>
+          <div class="dash-card-val" id="reviewCount">0</div>
+          <div class="dash-card-label">Reviews Given</div>
+        </div>
+      </div>
+
+      <div class="recent-section">
+        <h3>Recent Bookings</h3>
+        <div id="recentBookings">Loading...</div>
+      </div>
+
+      <div class="topup-panel hidden" id="topupPanel">
+        <h3>Add Funds to Wallet</h3>
+        <p>Simulated top-up — no real payment required</p>
+        <div class="topup-amounts">
+          <button onclick="setTopup(50)">$50</button>
+          <button onclick="setTopup(100)">$100</button>
+          <button onclick="setTopup(200)">$200</button>
+          <button onclick="setTopup(500)">$500</button>
+        </div>
+        <div class="topup-custom">
+          <input type="number" id="topupAmount" placeholder="Custom amount" min="1" max="10000">
+          <button class="btn-primary" onclick="doTopup()">Add Funds</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadDashboard() {
+  if (!getToken()) { window.location.href = '/'; return; }
+  const user = JSON.parse(localStorage.getItem('voyaga_user') || '{}');
+  document.getElementById('dashUserName').textContent = user.first_name || user.username || 'Traveler';
+  if (user.role === 'host') document.getElementById('hostLinks').classList.remove('hidden');
+
+  const [wallet, bookings] = await Promise.all([
+    api('/api/payments/wallet/'),
+    api('/api/bookings/')
+  ]);
+
+  if (wallet) {
+    document.getElementById('walletVal').textContent = '$' + wallet.balance.toFixed(2);
+    document.getElementById('walletAmount').textContent = '$' + wallet.balance.toFixed(2);
+  }
+  if (bookings) {
+    document.getElementById('bookingCount').textContent = bookings.count || 0;
+    const recent = bookings.results?.slice(0, 3) || [];
+    document.getElementById('recentBookings').innerHTML = recent.length
+      ? recent.map(b => `
+        <div class="booking-row">
+          <div class="booking-prop">${b.property_detail?.title || 'Property'}</div>
+          <div class="booking-dates">${b.check_in} → ${b.check_out}</div>
+          <div class="booking-amount">$${b.total_price}</div>
+          <span class="status-badge ${b.status}">${b.status}</span>
+        </div>`).join('')
+      : '<p class="empty-state">No bookings yet. <a href="/properties">Explore stays →</a></p>';
+  }
+}
+
+function showTopup() {
+  document.getElementById('topupPanel').classList.toggle('hidden');
+}
+
+function setTopup(amount) {
+  document.getElementById('topupAmount').value = amount;
+}
+
+async function doTopup() {
+  const amount = document.getElementById('topupAmount').value;
+  if (!amount || amount <= 0) { showToast('Enter a valid amount', 'error'); return; }
+  const result = await api('/api/payments/wallet/topup/', 'POST', { amount: parseFloat(amount) });
+  if (result) {
+    showToast(result.message, 'success');
+    document.getElementById('walletVal').textContent = '$' + result.new_balance.toFixed(2);
+    document.getElementById('walletAmount').textContent = '$' + result.new_balance.toFixed(2);
+    document.getElementById('topupAmount').value = '';
+  }
+}
+
+loadDashboard();
+</script>
+{% endblock %}

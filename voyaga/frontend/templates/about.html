@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block title %}About — Voyaga{% endblock %}
+{% block content %}
+
+<div class="page-container">
+  <div class="about-hero">
+    <div class="section-badge">✦ Our Story</div>
+    <h1 class="about-title">Travel reimagined<br><em>for the modern explorer</em></h1>
+    <p class="about-sub">Voyaga connects curious travelers with extraordinary stays around the world, powered by intelligent recommendations and a seamless booking experience.</p>
+  </div>
+
+  <div class="about-grid">
+    <div class="about-card">
+      <div class="about-icon">🌍</div>
+      <h3>Global Reach</h3>
+      <p>From Santorini cliffside villas to Tokyo machiya townhouses — over 2,400 handpicked properties across 89 countries.</p>
+    </div>
+    <div class="about-card">
+      <div class="about-icon">🤖</div>
+      <h3>AI-Powered</h3>
+      <p>Voya, our AI travel assistant, learns your preferences and surfaces the perfect stay every single time.</p>
+    </div>
+    <div class="about-card">
+      <div class="about-icon">🔒</div>
+      <h3>Secure Payments</h3>
+      <p>Our simulated wallet system means instant, transparent payments with no hidden fees — ever.</p>
+    </div>
+    <div class="about-card">
+      <div class="about-icon">⭐</div>
+      <h3>Verified Reviews</h3>
+      <p>Every review is from a real guest who completed their stay. Authentic opinions, always.</p>
+    </div>
+    <div class="about-card">
+      <div class="about-icon">🏠</div>
+      <h3>Become a Host</h3>
+      <p>List your property and reach thousands of travelers. Join our growing community of superhosts.</p>
+    </div>
+    <div class="about-card">
+      <div class="about-icon">💬</div>
+      <h3>24/7 Support</h3>
+      <p>Voya AI is always on. Real human support available for urgent issues around the clock.</p>
+    </div>
+  </div>
+
+  <div class="about-cta">
+    <h2>Ready to explore?</h2>
+    <p>Join thousands of travelers who have discovered their perfect escape with Voyaga.</p>
+    <div class="about-cta-btns">
+      <a href="/properties" class="btn-primary">Browse Stays</a>
+      <a href="/" class="btn-outline">Learn More</a>
+    </div>
+  </div>
+</div>
+
+<style>
+.about-hero { text-align: center; padding: 6rem 2rem 4rem; }
+.about-title { font-size: clamp(2rem, 5vw, 3.5rem); margin: 1rem 0; }
+.about-title em { color: var(--gold); font-style: italic; }
+.about-sub { color: var(--text2); max-width: 600px; margin: 0 auto; font-size: 1.05rem; line-height: 1.7; }
+.about-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; max-width: 1100px; margin: 0 auto 5rem; padding: 0 2rem; }
+.about-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); padding: 2rem; transition: all 0.3s; }
+.about-card:hover { border-color: var(--border2); transform: translateY(-4px); }
+.about-icon { font-size: 2.5rem; margin-bottom: 1rem; }
+.about-card h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+.about-card p { color: var(--text2); font-size: 0.9rem; line-height: 1.6; }
+.about-cta { text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); padding: 4rem 2rem; max-width: 700px; margin: 0 auto 4rem; }
+.about-cta h2 { font-size: 2rem; margin-bottom: 0.75rem; }
+.about-cta p { color: var(--text2); margin-bottom: 2rem; }
+.about-cta-btns { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+</style>
+
+{% endblock %}

@@ -1,0 +1,241 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<!-- Hero Section -->
+<section class="hero">
+  <div class="hero-bg">
+    <div class="hero-particle" style="--x:10%;--y:20%;--d:8s"></div>
+    <div class="hero-particle" style="--x:80%;--y:15%;--d:6s"></div>
+    <div class="hero-particle" style="--x:60%;--y:70%;--d:10s"></div>
+    <div class="hero-particle" style="--x:30%;--y:80%;--d:7s"></div>
+    <div class="hero-particle" style="--x:90%;--y:50%;--d:9s"></div>
+    <div class="hero-glow"></div>
+  </div>
+  <div class="hero-content">
+    <div class="hero-badge">✦ AI-Powered Travel Discovery</div>
+    <h1 class="hero-title">
+      Find your next<br>
+      <em>perfect escape</em>
+    </h1>
+    <p class="hero-subtitle">Handpicked stays. Intelligent recommendations. Unforgettable journeys.</p>
+
+    <div class="search-box">
+      <div class="search-field">
+        <label>Destination</label>
+        <input type="text" id="heroCity" placeholder="City or country...">
+      </div>
+      <div class="search-divider"></div>
+      <div class="search-field">
+        <label>Check-in</label>
+        <input type="date" id="heroCheckin">
+      </div>
+      <div class="search-divider"></div>
+      <div class="search-field">
+        <label>Check-out</label>
+        <input type="date" id="heroCheckout">
+      </div>
+      <div class="search-divider"></div>
+      <div class="search-field">
+        <label>Guests</label>
+        <input type="number" id="heroGuests" placeholder="2" min="1" max="20">
+      </div>
+      <button class="search-btn" onclick="heroSearch()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+          <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        Search
+      </button>
+    </div>
+
+    <div class="hero-tags">
+      <button onclick="quickSearch('Paris')">🗼 Paris</button>
+      <button onclick="quickSearch('Bali')">🌴 Bali</button>
+      <button onclick="quickSearch('New York')">🗽 New York</button>
+      <button onclick="quickSearch('Tokyo')">⛩️ Tokyo</button>
+      <button onclick="quickSearch('Santorini')">🏛️ Santorini</button>
+    </div>
+  </div>
+</section>
+
+<!-- Stats Bar -->
+<section class="stats-bar">
+  <div class="stat">
+    <span class="stat-num" data-target="2400">0</span>
+    <span class="stat-label">Luxury Properties</span>
+  </div>
+  <div class="stat-div"></div>
+  <div class="stat">
+    <span class="stat-num" data-target="89">0</span>
+    <span class="stat-label">Countries</span>
+  </div>
+  <div class="stat-div"></div>
+  <div class="stat">
+    <span class="stat-num" data-target="48000">0</span>
+    <span class="stat-label">Happy Guests</span>
+  </div>
+  <div class="stat-div"></div>
+  <div class="stat">
+    <span class="stat-num" data-target="98">0</span>
+    <span class="stat-label">% Satisfaction</span>
+  </div>
+</section>
+
+<!-- AI Recommendations -->
+<section class="section">
+  <div class="section-header">
+    <div class="section-badge">✦ AI Curated</div>
+    <h2 class="section-title">Recommended for you</h2>
+    <p class="section-sub">Our AI selects the finest stays based on your preferences</p>
+  </div>
+  <div class="properties-grid" id="recommendedGrid">
+    <div class="skeleton-card"></div>
+    <div class="skeleton-card"></div>
+    <div class="skeleton-card"></div>
+    <div class="skeleton-card"></div>
+  </div>
+</section>
+
+<!-- Type Filter -->
+<section class="section">
+  <div class="section-header">
+    <h2 class="section-title">Browse by type</h2>
+  </div>
+  <div class="type-filters">
+    <button class="type-pill active" data-type="">All</button>
+    <button class="type-pill" data-type="villa">🏰 Villa</button>
+    <button class="type-pill" data-type="apartment">🏢 Apartment</button>
+    <button class="type-pill" data-type="house">🏡 House</button>
+    <button class="type-pill" data-type="cabin">🌲 Cabin</button>
+    <button class="type-pill" data-type="studio">🏠 Studio</button>
+    <button class="type-pill" data-type="penthouse">✨ Penthouse</button>
+  </div>
+  <div class="properties-grid" id="mainGrid">
+    <div class="skeleton-card"></div>
+    <div class="skeleton-card"></div>
+    <div class="skeleton-card"></div>
+    <div class="skeleton-card"></div>
+    <div class="skeleton-card"></div>
+    <div class="skeleton-card"></div>
+  </div>
+  <div class="load-more-wrap">
+    <button class="btn-outline" id="loadMoreBtn" onclick="loadMoreProperties()">Load more stays</button>
+  </div>
+</section>
+
+<!-- Features Section -->
+<section class="features-section">
+  <div class="features-inner">
+    <div class="feature-card">
+      <div class="feature-icon">🤖</div>
+      <h3>AI-Powered Matching</h3>
+      <p>Our intelligent system learns your preferences and surfaces the perfect stay every time.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔒</div>
+      <h3>Secure & Transparent</h3>
+      <p>All transactions go through our secure simulated wallet. No hidden fees, ever.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⭐</div>
+      <h3>Verified Reviews</h3>
+      <p>Every review comes from a real guest who completed their booking. Authentic, always.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">💬</div>
+      <h3>24/7 AI Concierge</h3>
+      <p>Voya, our AI assistant, is always ready to help you plan and book your perfect trip.</p>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const heroCheckin = document.getElementById('heroCheckin');
+const heroCheckout = document.getElementById('heroCheckout');
+const today = new Date().toISOString().split('T')[0];
+heroCheckin.min = today;
+heroCheckout.min = today;
+heroCheckin.addEventListener('change', e => heroCheckout.min = e.target.value);
+
+function heroSearch() {
+  const city = document.getElementById('heroCity').value;
+  if (city) window.location.href = `/properties?city=${encodeURIComponent(city)}`;
+  else window.location.href = '/properties';
+}
+
+function quickSearch(city) {
+  window.location.href = `/properties?city=${encodeURIComponent(city)}`;
+}
+
+let currentPage = 1;
+let currentType = '';
+
+async function loadProperties(type = '', page = 1) {
+  const grid = document.getElementById('mainGrid');
+  if (page === 1) {
+    grid.innerHTML = Array(6).fill('<div class="skeleton-card"></div>').join('');
+  }
+  const params = new URLSearchParams({ page });
+  if (type) params.append('type', type);
+  const data = await api('/api/properties/?' + params, 'GET', null, true); // silent
+  if (!data) {
+    if (page === 1) grid.innerHTML = '<div class="empty-state-full"><span>🏡</span><p>No properties yet. Run <code>python manage.py shell < seed_data.py</code> to add sample data.</p></div>';
+    return;
+  }
+  const cards = data.results.map(p => propertyCard(p)).join('');
+  if (page === 1) grid.innerHTML = cards || '<div class="empty-state-full"><span>🏡</span><p>No properties found</p></div>';
+  else grid.insertAdjacentHTML('beforeend', cards);
+  document.getElementById('loadMoreBtn').style.display = data.next ? 'inline-flex' : 'none';
+}
+
+function loadMoreProperties() {
+  currentPage++;
+  loadProperties(currentType, currentPage);
+}
+
+document.querySelectorAll('.type-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.type-pill').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentType = btn.dataset.type;
+    currentPage = 1;
+    loadProperties(currentType, 1);
+  });
+});
+
+async function loadRecommended() {
+  const grid = document.getElementById('recommendedGrid');
+  const data = await api('/api/properties/recommendations/', 'GET', null, true); // silent
+  if (!data || !data.properties || !data.properties.length) {
+    grid.innerHTML = '<p class="empty-state" style="text-align:center;padding:2rem;color:var(--text2)">Recommendations appear once properties are added.</p>';
+    return;
+  }
+  grid.innerHTML = data.properties.slice(0, 4).map(p => propertyCard(p)).join('');
+}
+
+// Animate stats
+function animateStats() {
+  document.querySelectorAll('.stat-num').forEach(el => {
+    const target = +el.dataset.target;
+    let current = 0;
+    const step = target / 60;
+    const timer = setInterval(() => {
+      current = Math.min(current + step, target);
+      el.textContent = Math.floor(current).toLocaleString() + (target > 1000 ? '' : '%' === el.nextElementSibling.textContent[0] ? '%' : '');
+      if (current >= target) clearInterval(timer);
+    }, 25);
+  });
+}
+
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { animateStats(); observer.disconnect(); } });
+});
+observer.observe(document.querySelector('.stats-bar'));
+
+loadRecommended();
+loadProperties();
+</script>
+{% endblock %}

@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+{% block title %}Property — Voyaga{% endblock %}
+{% block content %}
+
+<div class="detail-container" id="detailContainer">
+  <div class="detail-skeleton">Loading...</div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const propId = window.location.pathname.split('/').filter(Boolean).pop();
+
+async function loadProperty() {
+  const data = await api(`/api/properties/${propId}/`);
+  if (!data) {
+    document.getElementById('detailContainer').innerHTML = '<p class="error-msg">Property not found</p>';
+    return;
+  }
+
+  const images = data.images || [];
+  const primaryImg = images.find(i => i.is_primary) || images[0];
+
+  document.getElementById('detailContainer').innerHTML = `
+    <div class="detail-header">
+      <div class="detail-breadcrumb"><a href="/">Home</a> / <a href="/properties">Stays</a> / ${data.city}</div>
+      <h1 class="detail-title">${data.title}</h1>
+      <div class="detail-meta">
+        <span class="rating-badge">★ ${data.avg_rating || 'New'}</span>
+        <span class="review-count">${data.review_count} reviews</span>
+        <span class="detail-location">📍 ${data.city}, ${data.country}</span>
+        <span class="detail-type">${data.property_type}</span>
+      </div>
+    </div>
+
+    <div class="detail-gallery">
+      <div class="gallery-main">
+        ${primaryImg ? `<img src="${primaryImg.image_url}" alt="${data.title}" id="mainImage">` : '<div class="no-image">🏠</div>'}
+      </div>
+      ${images.length > 1 ? `
+      <div class="gallery-thumbs">
+        ${images.map(img => `
+          <div class="thumb ${img.is_primary ? 'active' : ''}" onclick="setMainImage('${img.image_url}', this)">
+            <img src="${img.image_url}" alt="">
+          </div>`).join('')}
+      </div>` : ''}
+    </div>
+
+    <div class="detail-body">
+      <div class="detail-left">
+        <div class="host-card">
+          <div class="host-avatar">${data.host?.first_name?.[0] || 'H'}</div>
+          <div>
+            <p class="host-label">Hosted by</p>
+            <p class="host-name">${data.host_name}</p>
+          </div>
+        </div>
+
+        <div class="detail-specs">
+          <div class="spec"><span>👥</span> Up to ${data.max_guests} guests</div>
+          <div class="spec"><span>🛏️</span> ${data.bedrooms} bedroom${data.bedrooms > 1 ? 's' : ''}</div>
+          <div class="spec"><span>🚿</span> ${data.bathrooms} bathroom${data.bathrooms > 1 ? 's' : ''}</div>
+        </div>
+
+        <div class="detail-section">
+          <h3>About this place</h3>
+          <p class="detail-description">${data.description}</p>
+        </div>
+
+        ${data.amenities?.length ? `
+        <div class="detail-section">
+          <h3>Amenities</h3>
+          <div class="amenities-grid">
+            ${data.amenities.map(a => `<div class="amenity-item">${amenityIcon(a)} ${a}</div>`).join('')}
+          </div>
+        </div>` : ''}
+
+        <div class="detail-section">
+          <h3>★ Reviews <span id="reviewBadge"></span></h3>
+          <div id="reviewsList">Loading reviews...</div>
+        </div>
+      </div>
+
+      <div class="detail-right">
+        <div class="booking-card" id="bookingCard">
+          <div class="booking-price">
+            <span class="price-big">$${parseFloat(data.price_per_night).toFixed(2)}</span>
+            <span class="price-night">/ night</span>
+          </div>
+          <div class="date-row">
+            <div class="date-field">
+              <label>CHECK-IN</label>
+              <input type="date" id="checkIn" required>
+            </div>
+            <div class="date-field">
+              <label>CHECK-OUT</label>
+              <input type="date" id="checkOut" required>
+            </div>
+          </div>
+          <div class="guest-field">
+            <label>GUESTS</label>
+            <input type="number" id="bookGuests" value="1" min="1" max="${data.max_guests}">
+          </div>
+          <div class="price-summary hidden" id="priceSummary"></div>
+          <button class="btn-primary w-full" id="bookBtn" onclick="initiateBooking(${data.id}, ${data.price_per_night})">Reserve</button>
+          <p class="booking-note">You won't be charged until confirmed</p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const today = new Date().toISOString().split('T')[0];
+  const checkIn = document.getElementById('checkIn');
+  const checkOut = document.getElementById('checkOut');
+  checkIn.min = today;
+  checkOut.min = today;
+  checkIn.addEventListener('change', () => {
+    checkOut.min = checkIn.value;
+    updatePrice(data.price_per_night);
+  });
+  checkOut.addEventListener('change', () => updatePrice(data.price_per_night));
+
+  loadReviews(data.id);
+}
+
+function amenityIcon(a) {
+  const icons = {
+    wifi: '📶', pool: '🏊', gym: '💪', parking: '🚗',
+    kitchen: '🍳', ac: '❄️', heating: '🔥', tv: '📺',
+    washer: '🧺', balcony: '🌅'
+  };
+  return icons[a] || '✓';
+}
+
+function setMainImage(url, el) {
+  document.getElementById('mainImage').src = url;
+  document.querySelectorAll('.thumb').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function updatePrice(pricePerNight) {
+  const ci = document.getElementById('checkIn').value;
+  const co = document.getElementById('checkOut').value;
+  const summary = document.getElementById('priceSummary');
+  if (ci && co && co > ci) {
+    const nights = Math.round((new Date(co) - new Date(ci)) / 86400000);
+    const total = nights * pricePerNight;
+    summary.innerHTML = `
+      <div class="price-row">
+        <span>${nights} night${nights > 1 ? 's' : ''} × $${parseFloat(pricePerNight).toFixed(2)}</span>
+        <span>$${total.toFixed(2)}</span>
+      </div>
+      <div class="price-row total">
+        <span>Total</span>
+        <span>$${total.toFixed(2)}</span>
+      </div>`;
+    summary.classList.remove('hidden');
+  } else {
+    summary.classList.add('hidden');
+  }
+}
+
+async function initiateBooking(propId, price) {
+  if (!getToken()) {
+    showModal('loginModal');
+    return;
+  }
+
+  const ci = document.getElementById('checkIn').value;
+  const co = document.getElementById('checkOut').value;
+  const guests = parseInt(document.getElementById('bookGuests').value);
+
+  if (!ci || !co) {
+    showToast('Please select check-in and check-out dates', 'error');
+    return;
+  }
+  if (co <= ci) {
+    showToast('Check-out must be after check-in', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('bookBtn');
+  btn.disabled = true;
+  btn.textContent = 'Booking...';
+
+  const result = await api('/api/bookings/create/', 'POST', {
+    listing: parseInt(propId),
+    check_in: ci,
+    check_out: co,
+    guests_count: guests
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Reserve';
+
+  if (result && result.id) {
+    showToast('🎉 Booking confirmed!', 'success');
+    setTimeout(() => window.location.href = '/bookings', 1500);
+  }
+}
+
+async function loadReviews(propId) {
+  const list = document.getElementById('reviewsList');
+  const data = await api(`/api/auth/reviews/?property=${propId}`);
+
+  if (!data || !data.results || data.results.length === 0) {
+    list.innerHTML = '<p class="no-reviews">No reviews yet. Be the first!</p>';
+    return;
+  }
+
+  document.getElementById('reviewBadge').textContent = `(${data.count})`;
+  list.innerHTML = data.results.map(r => `
+    <div class="review-card">
+      <div class="review-header">
+        <div class="review-avatar">${(r.reviewer_name || '?')[0].toUpperCase()}</div>
+        <div>
+          <p class="reviewer-name">${r.reviewer_name}</p>
+          <p class="review-date">${new Date(r.created_at).toLocaleDateString('en-US', {year: 'numeric', month: 'long'})}</p>
+        </div>
+        <div class="review-stars">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</div>
+      </div>
+      <p class="review-text">${r.comment}</p>
+    </div>
+  `).join('');
+}
+
+loadProperty();
+</script>
+{% endblock %}

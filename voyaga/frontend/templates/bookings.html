@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}My Bookings — Voyaga{% endblock %}
+{% block content %}
+
+<div class="page-container">
+  <div class="page-header-row">
+    <h1 class="page-title">My Bookings</h1>
+    <a href="/properties" class="btn-outline">Find new stay</a>
+  </div>
+
+  <div class="booking-tabs">
+    <button class="tab active" onclick="filterBookings('all', this)">All</button>
+    <button class="tab" onclick="filterBookings('confirmed', this)">Confirmed</button>
+    <button class="tab" onclick="filterBookings('completed', this)">Completed</button>
+    <button class="tab" onclick="filterBookings('cancelled', this)">Cancelled</button>
+  </div>
+
+  <div id="bookingsList">
+    <div class="skeleton-card"></div>
+    <div class="skeleton-card"></div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+let allBookings = [];
+
+async function loadBookings() {
+  if (!getToken()) { window.location.href = '/'; return; }
+  const data = await api('/api/bookings/');
+  if (!data) return;
+  allBookings = data.results || [];
+  renderBookings(allBookings);
+}
+
+function renderBookings(bookings) {
+  const container = document.getElementById('bookingsList');
+  if (!bookings.length) {
+    container.innerHTML = '<div class="empty-state-full"><span>✈️</span><p>No bookings here. <a href="/properties">Find a stay →</a></p></div>';
+    return;
+  }
+  container.innerHTML = bookings.map(b => {
+    const prop = b.property_detail || {};
+    const canCancel = ['pending', 'confirmed'].includes(b.status);
+    const canReview = b.status === 'completed';
+    return `
+    <div class="booking-detail-card status-${b.status}">
+      <div class="booking-card-img">
+        ${prop.primary_image_url ? `<img src="${prop.primary_image_url}" alt="${prop.title}">` : '<div class="no-img">🏠</div>'}
+      </div>
+      <div class="booking-card-info">
+        <div class="booking-card-header">
+          <h3 onclick="window.location.href='/property/${b.property}'">${prop.title || 'Property'}</h3>
+          <span class="status-badge ${b.status}">${b.status}</span>
+        </div>
+        <p class="booking-location">📍 ${prop.city || ''}, ${prop.country || ''}</p>
+        <div class="booking-dates-row">
+          <div class="date-chip"><div class="chip-label">Check-in</div><div class="chip-val">${b.check_in}</div></div>
+          <div class="date-arrow">→</div>
+          <div class="date-chip"><div class="chip-label">Check-out</div><div class="chip-val">${b.check_out}</div></div>
+          <div class="date-chip"><div class="chip-label">Nights</div><div class="chip-val">${b.nights}</div></div>
+          <div class="date-chip"><div class="chip-label">Guests</div><div class="chip-val">${b.guests_count}</div></div>
+        </div>
+        <div class="booking-footer">
+          <div class="booking-total">Total: <strong>$${b.total_price}</strong></div>
+          <div class="booking-actions">
+            ${canCancel ? `<button class="btn-danger-sm" onclick="cancelBooking(${b.id})">Cancel</button>` : ''}
+            ${canReview ? `<button class="btn-outline-sm" onclick="showReviewForm(${b.id}, ${b.property})">Write Review</button>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterBookings(status, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderBookings(status === 'all' ? allBookings : allBookings.filter(b => b.status === status));
+}
+
+async function cancelBooking(id) {
+  if (!confirm('Cancel this booking? You will receive a full refund.')) return;
+  const result = await api(`/api/bookings/${id}/cancel/`, 'POST', {});
+  if (result) { showToast(result.message, 'success'); loadBookings(); }
+}
+
+function showReviewForm(bookingId, propId) {
+  const modal = `
+  <div class="modal-overlay" id="reviewModal" onclick="if(event.target===this)this.remove()">
+    <div class="modal">
+      <button class="modal-close" onclick="document.getElementById('reviewModal').remove()">✕</button>
+      <div class="modal-header">
+        <h2>Write a Review</h2>
+        <p>Share your experience</p>
+      </div>
+      <form onsubmit="submitReview(event, ${bookingId}, ${propId})">
+        <div class="form-group">
+          <label>Rating</label>
+          <div class="star-selector" id="starSelector">
+            ${[1,2,3,4,5].map(n => `<span class="star-opt" data-val="${n}" onclick="selectStar(${n})">★</span>`).join('')}
+          </div>
+          <input type="hidden" id="reviewRating" value="0">
+        </div>
+        <div class="form-group">
+          <label>Your review</label>
+          <textarea id="reviewComment" rows="4" placeholder="Tell others about your stay..." required minlength="20"></textarea>
+        </div>
+        <button type="submit" class="btn-primary w-full">Submit Review</button>
+      </form>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', modal);
+}
+
+function selectStar(n) {
+  document.getElementById('reviewRating').value = n;
+  document.querySelectorAll('.star-opt').forEach((s, i) => {
+    s.classList.toggle('active', i < n);
+  });
+}
+
+async function submitReview(e, bookingId, propId) {
+  e.preventDefault();
+  const rating = parseInt(document.getElementById('reviewRating').value);
+  const comment = document.getElementById('reviewComment').value;
+  if (!rating) { showToast('Please select a rating', 'error'); return; }
+  const result = await api('/api/auth/reviews/', 'POST', {
+    booking: bookingId, property: propId, rating, comment
+  });
+  if (result) {
+    document.getElementById('reviewModal').remove();
+    showToast('Review submitted!', 'success');
+  }
+}
+
+loadBookings();
+</script>
+{% endblock %}
