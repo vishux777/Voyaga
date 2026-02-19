@@ -4,6 +4,7 @@
 
 <div class="page-container">
   <div class="profile-wrap">
+
     <div class="profile-header">
       <div class="profile-avatar-big" id="profileAvatar">?</div>
       <div>
@@ -14,6 +15,7 @@
     </div>
 
     <div class="profile-body">
+
       <div class="profile-section">
         <h3>Edit Profile</h3>
         <form id="profileForm" onsubmit="saveProfile(event)">
@@ -29,7 +31,7 @@
           </div>
           <div class="form-group">
             <label>Phone</label>
-            <input type="text" id="pfPhone" placeholder="+1 234 567 8900">
+            <input type="text" id="pfPhone" placeholder="+91 98765 43210">
           </div>
           <div class="form-group">
             <label>Bio</label>
@@ -45,11 +47,81 @@
         <div class="wallet-card">
           <div class="wallet-bal-label">Current Balance</div>
           <div class="wallet-bal-amount" id="profileWallet">$0.00</div>
-          <div class="topup-amounts" style="margin-top:1rem;">
+        </div>
+
+        <div class="topup-tabs">
+          <button class="topup-tab active" onclick="switchTab('simulated', this)">⚡ Instant</button>
+          <button class="topup-tab" onclick="switchTab('crypto', this)">₿ Crypto</button>
+        </div>
+
+        <div id="tab-simulated" class="topup-tab-content">
+          <p class="tab-desc">Instant simulated top-up — no real payment required</p>
+          <div class="topup-amounts">
             <button onclick="quickTopup(50)">+ $50</button>
             <button onclick="quickTopup(100)">+ $100</button>
             <button onclick="quickTopup(200)">+ $200</button>
             <button onclick="quickTopup(500)">+ $500</button>
+          </div>
+          <div class="topup-custom">
+            <input type="number" id="simAmount" placeholder="Custom amount" min="1" max="10000">
+            <button class="btn-primary" onclick="quickTopup(parseFloat(document.getElementById('simAmount').value))">Add Funds</button>
+          </div>
+        </div>
+
+        <div id="tab-crypto" class="topup-tab-content hidden">
+          <p class="tab-desc">Pay with any cryptocurrency via NOWPayments — real payment processing</p>
+
+          <div class="form-group">
+            <label>Amount (USD)</label>
+            <div class="topup-amounts">
+              <button onclick="setNowAmount(10)">$10</button>
+              <button onclick="setNowAmount(25)">$25</button>
+              <button onclick="setNowAmount(50)">$50</button>
+              <button onclick="setNowAmount(100)">$100</button>
+            </div>
+            <div class="topup-custom" style="margin-top:8px;">
+              <input type="number" id="nowAmount" placeholder="Custom USD amount" min="1">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Select Cryptocurrency</label>
+            <select id="nowCurrency">
+              <option value="btc">Bitcoin (BTC)</option>
+              <option value="eth">Ethereum (ETH)</option>
+              <option value="usdt">Tether (USDT)</option>
+              <option value="ltc">Litecoin (LTC)</option>
+              <option value="bnb">BNB</option>
+              <option value="sol">Solana (SOL)</option>
+              <option value="doge">Dogecoin (DOGE)</option>
+            </select>
+          </div>
+
+          <button class="btn-primary w-full" onclick="createNowPayment()" id="nowPayBtn">
+            Generate Payment Address
+          </button>
+
+          <div id="nowPaymentBox" class="hidden">
+            <div class="crypto-payment-box">
+              <div class="cpb-header">
+                <div class="cpb-status" id="nowStatus">⏳ Waiting for payment...</div>
+                <button class="btn-sm" onclick="checkNowStatus()">↻ Check Status</button>
+              </div>
+              <div class="cpb-row">
+                <span class="cpb-label">Send exactly</span>
+                <span class="cpb-val" id="nowPayAmount"></span>
+              </div>
+              <div class="cpb-row">
+                <span class="cpb-label">To this address</span>
+              </div>
+              <div class="cpb-address" id="nowPayAddress" onclick="copyNowAddr()"></div>
+              <button class="copy-btn" onclick="copyNowAddr()">📋 Copy Address</button>
+              <div class="cpb-row" style="margin-top:0.5rem;">
+                <span class="cpb-label">USD equivalent</span>
+                <span class="cpb-val" id="nowUsdAmount"></span>
+              </div>
+              <p class="tab-note">After sending, click Check Status. The page auto-checks every 30 seconds.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -58,28 +130,51 @@
         <h3>Transaction History</h3>
         <div id="transactionList">Loading...</div>
       </div>
+
     </div>
   </div>
 </div>
 
 <style>
 .profile-wrap { max-width: 800px; margin: 0 auto; padding-top: 2rem; }
-.profile-header { display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2.5rem; padding: 2rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); }
+.profile-header { display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2rem; padding: 2rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); }
 .profile-avatar-big { width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--gold)); display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 700; color: white; flex-shrink: 0; }
 .profile-name { font-size: 1.6rem; margin-bottom: 4px; }
 .profile-role { color: var(--gold); font-size: 0.85rem; text-transform: capitalize; margin-bottom: 2px; }
 .profile-email { color: var(--text2); font-size: 0.88rem; }
-.profile-body { display: flex; flex-direction: column; gap: 1.5rem; }
+.profile-body { display: flex; flex-direction: column; gap: 1.5rem; margin-bottom: 3rem; }
 .profile-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); padding: 1.5rem; }
-.profile-section h3 { font-size: 1rem; margin-bottom: 1.2rem; color: var(--text); }
-.wallet-card { text-align: center; padding: 1rem; }
-.wallet-bal-label { font-size: 0.8rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; }
-.wallet-bal-amount { font-size: 2.5rem; font-family: 'Playfair Display', serif; color: var(--gold); margin: 0.25rem 0; }
+.profile-section h3 { font-size: 1rem; margin-bottom: 1.2rem; }
+.wallet-card { text-align: center; padding: 1rem 0 1.5rem; }
+.wallet-bal-label { font-size: 0.78rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; }
+.wallet-bal-amount { font-size: 2.8rem; font-family: 'Playfair Display', serif; color: var(--gold); margin: 0.25rem 0; }
+.topup-tabs { display: flex; gap: 6px; margin-bottom: 1.2rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem; }
+.topup-tab { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); padding: 7px 16px; border-radius: 20px; cursor: pointer; font-size: 0.85rem; font-family: 'DM Sans', sans-serif; transition: all 0.2s; }
+.topup-tab.active { background: var(--gold-glow); border-color: var(--gold); color: var(--gold); }
+.topup-tab-content { animation: fadeIn 0.2s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.tab-desc { color: var(--text2); font-size: 0.85rem; margin-bottom: 1rem; }
+.tab-note { color: var(--text2); font-size: 0.78rem; margin-top: 0.75rem; line-height: 1.5; }
+.topup-amounts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; }
+.topup-amounts button { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); padding: 8px 16px; border-radius: 20px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.2s; }
+.topup-amounts button:hover { border-color: var(--gold); color: var(--gold); }
+.topup-custom { display: flex; gap: 8px; }
+.topup-custom input { flex: 1; background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 9px 12px; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 0.88rem; outline: none; }
+.topup-custom input:focus { border-color: var(--gold); }
+.crypto-payment-box { background: var(--bg2); border: 1px solid var(--border2); border-radius: 12px; padding: 1.2rem; margin-top: 1rem; }
+.cpb-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.cpb-status { font-size: 0.88rem; font-weight: 500; }
+.cpb-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 0.85rem; }
+.cpb-label { color: var(--text2); }
+.cpb-val { font-weight: 600; color: var(--gold); }
+.cpb-address { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: monospace; font-size: 0.78rem; word-break: break-all; color: var(--text2); cursor: pointer; margin: 6px 0; }
+.copy-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); padding: 6px 14px; border-radius: 16px; font-size: 0.78rem; cursor: pointer; width: 100%; margin-top: 4px; font-family: 'DM Sans', sans-serif; transition: all 0.2s; }
+.copy-btn:hover { border-color: var(--gold); color: var(--gold); }
 .tx-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
 .tx-row:last-child { border-bottom: none; }
 .tx-desc { color: var(--text2); flex: 1; }
-.tx-date { color: var(--text2); font-size: 0.75rem; margin: 0 1rem; }
-.tx-amount { font-weight: 600; }
+.tx-date { color: var(--text2); font-size: 0.75rem; margin: 0 1rem; white-space: nowrap; }
+.tx-amount { font-weight: 600; white-space: nowrap; }
 .tx-amount.positive { color: var(--green); }
 .tx-amount.negative { color: var(--red); }
 </style>
@@ -87,6 +182,9 @@
 {% endblock %}
 {% block scripts %}
 <script>
+let currentPaymentId = null;
+let statusCheckInterval = null;
+
 async function loadProfile() {
   if (!getToken()) { window.location.href = '/'; return; }
 
@@ -108,7 +206,7 @@ async function loadProfile() {
   }
 
   if (wallet) {
-    document.getElementById('profileWallet').textContent = '$' + wallet.balance.toFixed(2);
+    updateWalletDisplay(wallet.balance);
   }
 
   if (txData && txData.results) {
@@ -116,22 +214,127 @@ async function loadProfile() {
     if (!txData.results.length) {
       list.innerHTML = '<p class="empty-state">No transactions yet.</p>';
     } else {
-      list.innerHTML = txData.results.slice(0, 10).map(t => `
-        <div class="tx-row">
-          <span class="tx-desc">${t.description}</span>
-          <span class="tx-date">${new Date(t.created_at).toLocaleDateString()}</span>
-          <span class="tx-amount ${parseFloat(t.amount) >= 0 ? 'positive' : 'negative'}">
-            ${parseFloat(t.amount) >= 0 ? '+' : ''}$${Math.abs(parseFloat(t.amount)).toFixed(2)}
-          </span>
-        </div>`).join('');
+      list.innerHTML = txData.results.slice(0, 15).map(t => {
+        const amt = parseFloat(t.amount);
+        return `
+          <div class="tx-row">
+            <span class="tx-desc">${t.description}</span>
+            <span class="tx-date">${new Date(t.created_at).toLocaleDateString()}</span>
+            <span class="tx-amount ${amt >= 0 ? 'positive' : 'negative'}">
+              ${amt >= 0 ? '+' : ''}$${Math.abs(amt).toFixed(2)}
+            </span>
+          </div>`;
+      }).join('');
     }
   }
+}
+
+function updateWalletDisplay(balance) {
+  const formatted = '$' + parseFloat(balance).toFixed(2);
+  const profileEl = document.getElementById('profileWallet');
+  const navEl = document.getElementById('walletAmount');
+  if (profileEl) profileEl.textContent = formatted;
+  if (navEl) navEl.textContent = formatted;
+  const user = getUser();
+  if (user) {
+    user.wallet_balance = balance;
+    localStorage.setItem('voyaga_user', JSON.stringify(user));
+  }
+}
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.topup-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.topup-tab-content').forEach(t => t.classList.add('hidden'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + name).classList.remove('hidden');
+}
+
+async function quickTopup(amount) {
+  if (!amount || isNaN(amount) || amount <= 0) { showToast('Enter a valid amount', 'error'); return; }
+  const result = await api('/api/payments/wallet/topup/', 'POST', { amount: parseFloat(amount) });
+  if (result) {
+    updateWalletDisplay(result.new_balance);
+    showToast(result.message, 'success');
+    loadProfile();
+  }
+}
+
+function setNowAmount(amount) {
+  document.getElementById('nowAmount').value = amount;
+}
+
+async function createNowPayment() {
+  const amount = parseFloat(document.getElementById('nowAmount').value);
+  const currency = document.getElementById('nowCurrency').value;
+
+  if (!amount || amount <= 0) { showToast('Enter a valid USD amount', 'error'); return; }
+
+  const btn = document.getElementById('nowPayBtn');
+  btn.disabled = true;
+  btn.textContent = 'Creating payment...';
+
+  const result = await api('/api/payments/nowpayments/create/', 'POST', { amount, currency });
+
+  btn.disabled = false;
+  btn.textContent = 'Generate Payment Address';
+
+  if (!result) return;
+
+  currentPaymentId = result.payment_id;
+
+  document.getElementById('nowPayAmount').textContent = `${result.pay_amount} ${result.pay_currency?.toUpperCase()}`;
+  document.getElementById('nowPayAddress').textContent = result.pay_address;
+  document.getElementById('nowUsdAmount').textContent = `$${amount.toFixed(2)}`;
+  document.getElementById('nowStatus').textContent = '⏳ Waiting for payment...';
+  document.getElementById('nowPaymentBox').classList.remove('hidden');
+
+  if (statusCheckInterval) clearInterval(statusCheckInterval);
+  statusCheckInterval = setInterval(checkNowStatus, 30000);
+}
+
+async function checkNowStatus() {
+  if (!currentPaymentId) return;
+
+  const result = await api(`/api/payments/nowpayments/status/${currentPaymentId}/`);
+  if (!result) return;
+
+  const statusEl = document.getElementById('nowStatus');
+  const statusMap = {
+    waiting: '⏳ Waiting for payment...',
+    confirming: '🔄 Confirming on blockchain...',
+    confirmed: '✅ Confirmed!',
+    finished: '✅ Payment complete!',
+    failed: '❌ Payment failed',
+    expired: '⌛ Payment expired',
+    partially_paid: '⚠️ Partially paid'
+  };
+
+  statusEl.textContent = statusMap[result.status] || result.status;
+
+  if (result.credited) {
+    clearInterval(statusCheckInterval);
+    statusCheckInterval = null;
+    updateWalletDisplay(result.new_balance);
+    showToast(`$${result.amount} added to your wallet!`, 'success');
+    setTimeout(() => {
+      document.getElementById('nowPaymentBox').classList.add('hidden');
+      currentPaymentId = null;
+      loadProfile();
+    }, 2000);
+  }
+}
+
+function copyNowAddr() {
+  const addr = document.getElementById('nowPayAddress').textContent.trim();
+  navigator.clipboard.writeText(addr);
+  showToast('Address copied!', 'success');
 }
 
 async function saveProfile(e) {
   e.preventDefault();
   const btn = document.getElementById('saveBtn');
-  btn.disabled = true; btn.textContent = 'Saving...';
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
 
   const result = await api('/api/auth/profile/', 'PATCH', {
     first_name: document.getElementById('pfFirst').value,
@@ -140,7 +343,8 @@ async function saveProfile(e) {
     bio: document.getElementById('pfBio').value,
   });
 
-  btn.disabled = false; btn.textContent = 'Save Changes';
+  btn.disabled = false;
+  btn.textContent = 'Save Changes';
 
   if (result) {
     localStorage.setItem('voyaga_user', JSON.stringify(result));
@@ -149,15 +353,6 @@ async function saveProfile(e) {
     msg.classList.remove('hidden');
     setTimeout(() => msg.classList.add('hidden'), 3000);
     showToast('Profile saved!', 'success');
-  }
-}
-
-async function quickTopup(amount) {
-  const result = await api('/api/payments/wallet/topup/', 'POST', { amount });
-  if (result) {
-    document.getElementById('profileWallet').textContent = '$' + result.new_balance.toFixed(2);
-    document.getElementById('walletAmount').textContent = '$' + result.new_balance.toFixed(2);
-    showToast(result.message, 'success');
   }
 }
 

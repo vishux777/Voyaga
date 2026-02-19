@@ -13,6 +13,7 @@ function setAuth(data) {
   localStorage.setItem('voyaga_refresh', data.tokens.refresh);
   localStorage.setItem('voyaga_user', JSON.stringify(data.user));
   updateNavUI(data.user);
+  fetchAndUpdateWallet();
 }
 
 function logout() {
@@ -276,9 +277,10 @@ window.addEventListener('scroll', () => {
   if (nav) nav.classList.toggle('scrolled', window.scrollY > 50);
 });
 
-// ── INIT ──────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  updateNavUI(getUser());
+  const user = getUser();
+  updateNavUI(user);
+  if (user) fetchAndUpdateWallet();
 });
 function toggleDropdown() {
   const dd = document.getElementById('userDropdown');
@@ -292,3 +294,31 @@ document.addEventListener('click', function(e) {
     dd.classList.remove('open');
   }
 });
+async function refreshWallet() {
+  const data = await api('/api/payments/wallet/');
+  if (data) {
+    const amount = '$' + parseFloat(data.balance).toFixed(2);
+    const badge = document.getElementById('walletAmount');
+    if (badge) badge.textContent = amount;
+    const user = getUser();
+    if (user) {
+      user.wallet_balance = data.balance;
+      localStorage.setItem('voyaga_user', JSON.stringify(user));
+    }
+  }
+}
+async function fetchAndUpdateWallet() {
+  try {
+    const data = await api('/api/payments/wallet/');
+    if (data) {
+      const formatted = '$' + parseFloat(data.balance).toFixed(2);
+      const badge = document.getElementById('walletAmount');
+      if (badge) badge.textContent = formatted;
+      const user = getUser();
+      if (user) {
+        user.wallet_balance = data.balance;
+        localStorage.setItem('voyaga_user', JSON.stringify(user));
+      }
+    }
+  } catch (e) {}
+}

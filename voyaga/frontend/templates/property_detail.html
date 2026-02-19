@@ -55,18 +55,15 @@ async function loadProperty() {
             <p class="host-name">${data.host_name}</p>
           </div>
         </div>
-
         <div class="detail-specs">
           <div class="spec"><span>👥</span> Up to ${data.max_guests} guests</div>
           <div class="spec"><span>🛏️</span> ${data.bedrooms} bedroom${data.bedrooms > 1 ? 's' : ''}</div>
           <div class="spec"><span>🚿</span> ${data.bathrooms} bathroom${data.bathrooms > 1 ? 's' : ''}</div>
         </div>
-
         <div class="detail-section">
           <h3>About this place</h3>
           <p class="detail-description">${data.description}</p>
         </div>
-
         ${data.amenities?.length ? `
         <div class="detail-section">
           <h3>Amenities</h3>
@@ -74,7 +71,6 @@ async function loadProperty() {
             ${data.amenities.map(a => `<div class="amenity-item">${amenityIcon(a)} ${a}</div>`).join('')}
           </div>
         </div>` : ''}
-
         <div class="detail-section">
           <h3>★ Reviews <span id="reviewBadge"></span></h3>
           <div id="reviewsList">Loading reviews...</div>
@@ -83,27 +79,117 @@ async function loadProperty() {
 
       <div class="detail-right">
         <div class="booking-card" id="bookingCard">
-          <div class="booking-price">
-            <span class="price-big">$${parseFloat(data.price_per_night).toFixed(2)}</span>
-            <span class="price-night">/ night</span>
-          </div>
-          <div class="date-row">
-            <div class="date-field">
-              <label>CHECK-IN</label>
-              <input type="date" id="checkIn" required>
+
+          <!-- STEP 1: Date selection -->
+          <div id="step1">
+            <div class="booking-price">
+              <span class="price-big">$${parseFloat(data.price_per_night).toFixed(2)}</span>
+              <span class="price-night">/ night</span>
             </div>
-            <div class="date-field">
-              <label>CHECK-OUT</label>
-              <input type="date" id="checkOut" required>
+            <div class="date-row">
+              <div class="date-field">
+                <label>CHECK-IN</label>
+                <input type="date" id="checkIn" required>
+              </div>
+              <div class="date-field">
+                <label>CHECK-OUT</label>
+                <input type="date" id="checkOut" required>
+              </div>
+            </div>
+            <div class="guest-field">
+              <label>GUESTS</label>
+              <input type="number" id="bookGuests" value="1" min="1" max="${data.max_guests}">
+            </div>
+            <div class="form-group" style="margin-top:0.75rem;">
+              <label style="font-size:0.65rem;font-weight:700;letter-spacing:0.08em;color:var(--text2);display:block;margin-bottom:6px;text-transform:uppercase;">Pay with</label>
+              <select id="bookCurrency" style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.88rem;outline:none;">
+                <option value="btc">₿ Bitcoin (BTC)</option>
+                <option value="eth">Ξ Ethereum (ETH)</option>
+                <option value="usdt">◎ Tether (USDT)</option>
+                <option value="ltc">Ł Litecoin (LTC)</option>
+                <option value="bnb">⬡ BNB</option>
+                <option value="sol">◎ Solana (SOL)</option>
+                <option value="doge">Ð Dogecoin (DOGE)</option>
+              </select>
+            </div>
+            <div class="price-summary hidden" id="priceSummary"></div>
+            <button class="btn-primary w-full" id="bookBtn" onclick="initiateBooking(${data.id}, ${data.price_per_night})">
+              ₿ Pay with Crypto
+            </button>
+            <p class="booking-note">Powered by crypto — secure & instant</p>
+          </div>
+
+          <!-- STEP 2: Payment address -->
+          <div id="step2" class="hidden">
+            <div class="pay-step-header">
+              <div class="pay-step-icon">₿</div>
+              <div>
+                <div class="pay-step-title">Send Payment</div>
+                <div class="pay-step-sub" id="payNetwork"></div>
+              </div>
+            </div>
+
+            <div class="pay-info-row">
+              <span class="pay-label">Property</span>
+              <span class="pay-val" id="payPropName"></span>
+            </div>
+            <div class="pay-info-row">
+              <span class="pay-label">Amount (USD)</span>
+              <span class="pay-val gold" id="payUSD"></span>
+            </div>
+            <div class="pay-info-row">
+              <span class="pay-label">Send exactly</span>
+              <span class="pay-val gold" id="payCryptoAmount"></span>
+            </div>
+
+            <div class="pay-address-label">Send to this address:</div>
+            <div class="pay-address-box" id="payAddress" onclick="copyPayAddress()"></div>
+            <button class="pay-copy-btn" onclick="copyPayAddress()">📋 Copy Address</button>
+
+            <div class="pay-timer" id="payTimer">⏳ Expires in 60:00</div>
+
+            <div class="pay-steps">
+              <div class="pay-step-item done">✓ Payment address generated</div>
+              <div class="pay-step-item" id="psi2">◎ Waiting for transaction...</div>
+              <div class="pay-step-item" id="psi3">◎ Confirming on blockchain</div>
+              <div class="pay-step-item" id="psi4">◎ Booking confirmed</div>
+            </div>
+
+            <button class="btn-primary w-full" id="confirmPayBtn" onclick="confirmPayment()" style="margin-top:1rem;">
+              ✓ I've sent the payment
+            </button>
+            <button class="btn-outline w-full" onclick="resetToStep1()" style="margin-top:0.5rem;font-size:0.82rem;">
+              ← Change dates
+            </button>
+          </div>
+
+          <!-- STEP 3: Confirming -->
+          <div id="step3" class="hidden">
+            <div class="confirming-box">
+              <div class="confirming-spinner"></div>
+              <div class="confirming-title">Verifying Payment</div>
+              <div class="confirming-sub">Checking blockchain confirmation...</div>
+              <div class="confirming-steps">
+                <div class="cs-row done">✓ Payment received</div>
+                <div class="cs-row active" id="cs2">⟳ Confirming transaction...</div>
+                <div class="cs-row" id="cs3">◎ Creating booking</div>
+              </div>
             </div>
           </div>
-          <div class="guest-field">
-            <label>GUESTS</label>
-            <input type="number" id="bookGuests" value="1" min="1" max="${data.max_guests}">
+
+          <!-- STEP 4: Success -->
+          <div id="step4" class="hidden">
+            <div class="success-box">
+              <div class="success-icon">✓</div>
+              <div class="success-title">Booking Confirmed!</div>
+              <div class="success-sub">Your crypto payment was received and booking is confirmed.</div>
+              <div class="success-detail" id="successDetail"></div>
+              <a href="/bookings" class="btn-primary w-full" style="margin-top:1.25rem;display:block;text-align:center;text-decoration:none;">
+                View My Bookings
+              </a>
+            </div>
           </div>
-          <div class="price-summary hidden" id="priceSummary"></div>
-          <button class="btn-primary w-full" id="bookBtn" onclick="initiateBooking(${data.id}, ${data.price_per_night})">Reserve</button>
-          <p class="booking-note">You won't be charged until confirmed</p>
+
         </div>
       </div>
     </div>
@@ -114,21 +200,14 @@ async function loadProperty() {
   const checkOut = document.getElementById('checkOut');
   checkIn.min = today;
   checkOut.min = today;
-  checkIn.addEventListener('change', () => {
-    checkOut.min = checkIn.value;
-    updatePrice(data.price_per_night);
-  });
+  checkIn.addEventListener('change', () => { checkOut.min = checkIn.value; updatePrice(data.price_per_night); });
   checkOut.addEventListener('change', () => updatePrice(data.price_per_night));
 
   loadReviews(data.id);
 }
 
 function amenityIcon(a) {
-  const icons = {
-    wifi: '📶', pool: '🏊', gym: '💪', parking: '🚗',
-    kitchen: '🍳', ac: '❄️', heating: '🔥', tv: '📺',
-    washer: '🧺', balcony: '🌅'
-  };
+  const icons = { wifi:'📶', pool:'🏊', gym:'💪', parking:'🚗', kitchen:'🍳', ac:'❄️', heating:'🔥', tv:'📺', washer:'🧺', balcony:'🌅' };
   return icons[a] || '✓';
 }
 
@@ -146,84 +225,197 @@ function updatePrice(pricePerNight) {
     const nights = Math.round((new Date(co) - new Date(ci)) / 86400000);
     const total = nights * pricePerNight;
     summary.innerHTML = `
-      <div class="price-row">
-        <span>${nights} night${nights > 1 ? 's' : ''} × $${parseFloat(pricePerNight).toFixed(2)}</span>
-        <span>$${total.toFixed(2)}</span>
-      </div>
-      <div class="price-row total">
-        <span>Total</span>
-        <span>$${total.toFixed(2)}</span>
-      </div>`;
+      <div class="price-row"><span>${nights} night${nights>1?'s':''} × $${parseFloat(pricePerNight).toFixed(2)}</span><span>$${total.toFixed(2)}</span></div>
+      <div class="price-row total"><span>Total</span><span>$${total.toFixed(2)}</span></div>`;
     summary.classList.remove('hidden');
   } else {
     summary.classList.add('hidden');
   }
 }
 
+let currentPaymentId = null;
+let timerInterval = null;
+
 async function initiateBooking(propId, price) {
-  if (!getToken()) {
-    showModal('loginModal');
-    return;
-  }
+  console.log('BOOKING:', propId, 'CI:', document.getElementById('checkIn')?.value, 'CO:', document.getElementById('checkOut')?.value);
+  if (!getToken()) { showModal('loginModal'); return; }
 
   const ci = document.getElementById('checkIn').value;
   const co = document.getElementById('checkOut').value;
   const guests = parseInt(document.getElementById('bookGuests').value);
+  const currency = document.getElementById('bookCurrency').value;
 
-  if (!ci || !co) {
-    showToast('Please select check-in and check-out dates', 'error');
-    return;
-  }
-  if (co <= ci) {
-    showToast('Check-out must be after check-in', 'error');
-    return;
-  }
+  if (!ci || !co) { showToast('Please select dates', 'error'); return; }
+  if (co <= ci) { showToast('Check-out must be after check-in', 'error'); return; }
 
   const btn = document.getElementById('bookBtn');
   btn.disabled = true;
-  btn.textContent = 'Booking...';
+  btn.textContent = 'Generating address...';
 
-  const result = await api('/api/bookings/create/', 'POST', {
+  const result = await api('/api/bookings/initiate/', 'POST', {
     listing: parseInt(propId),
     check_in: ci,
     check_out: co,
-    guests_count: guests
+    guests_count: guests,
+    currency: currency
   });
 
   btn.disabled = false;
-  btn.textContent = 'Reserve';
+  btn.textContent = '₿ Pay with Crypto';
 
-  if (result && result.id) {
-    showToast('🎉 Booking confirmed!', 'success');
-    setTimeout(() => window.location.href = '/bookings', 1500);
+  if (!result || result.error) {
+    showToast(result?.error || 'Failed to initiate payment', 'error');
+    return;
   }
+
+  currentPaymentId = result.payment_id;
+
+  document.getElementById('payPropName').textContent = result.property;
+  document.getElementById('payUSD').textContent = `$${parseFloat(result.amount_usd).toFixed(2)}`;
+  document.getElementById('payCryptoAmount').textContent = `${result.pay_amount} ${result.pay_currency}`;
+  document.getElementById('payAddress').textContent = result.pay_address;
+  document.getElementById('payNetwork').textContent = result.network;
+
+  showStep('step2');
+  startTimer(3600);
+}
+
+async function confirmPayment() {
+  if (!currentPaymentId) return;
+
+  const btn = document.getElementById('confirmPayBtn');
+  btn.disabled = true;
+  btn.textContent = 'Verifying...';
+
+  showStep('step3');
+
+  // Simulate blockchain confirmation delay
+  await new Promise(r => setTimeout(r, 1500));
+  document.getElementById('cs2').classList.add('done');
+  document.getElementById('cs2').textContent = '✓ Transaction confirmed';
+  document.getElementById('cs3').classList.add('active');
+  document.getElementById('cs3').textContent = '⟳ Creating booking...';
+
+  await new Promise(r => setTimeout(r, 1500));
+
+  const result = await api(`/api/bookings/payment-status/${currentPaymentId}/`, 'POST', {});
+
+  if (result && result.booking_created) {
+    document.getElementById('cs3').classList.add('done');
+    document.getElementById('cs3').textContent = '✓ Booking created';
+
+    await new Promise(r => setTimeout(r, 500));
+
+    document.getElementById('successDetail').innerHTML = `
+      <div style="margin-top:0.75rem;font-size:0.85rem;color:var(--text2);">
+        <div><strong style="color:var(--text);">${result.property}</strong></div>
+        <div>Booking #${result.booking_id}</div>
+        <div>Total paid: $${parseFloat(result.amount).toFixed(2)}</div>
+      </div>`;
+
+    if (timerInterval) clearInterval(timerInterval);
+    showStep('step4');
+  } else {
+    showStep('step2');
+    btn.disabled = false;
+    btn.textContent = '✓ I\'ve sent the payment';
+    showToast(result?.error || 'Verification failed. Try again.', 'error');
+  }
+}
+
+function showStep(stepId) {
+  ['step1','step2','step3','step4'].forEach(s => {
+    const el = document.getElementById(s);
+    if (el) el.classList.add('hidden');
+  });
+  const target = document.getElementById(stepId);
+  if (target) target.classList.remove('hidden');
+}
+
+function resetToStep1() {
+  if (timerInterval) clearInterval(timerInterval);
+  currentPaymentId = null;
+  showStep('step1');
+}
+
+function copyPayAddress() {
+  const addr = document.getElementById('payAddress').textContent.trim();
+  navigator.clipboard.writeText(addr);
+  showToast('Address copied!', 'success');
+}
+
+function startTimer(seconds) {
+  if (timerInterval) clearInterval(timerInterval);
+  let remaining = seconds;
+  const el = document.getElementById('payTimer');
+  timerInterval = setInterval(() => {
+    remaining--;
+    const m = Math.floor(remaining / 60).toString().padStart(2, '0');
+    const s = (remaining % 60).toString().padStart(2, '0');
+    if (el) el.textContent = `⏳ Expires in ${m}:${s}`;
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      if (el) el.textContent = '⌛ Payment expired';
+      showToast('Payment session expired. Please start again.', 'error');
+      resetToStep1();
+    }
+  }, 1000);
 }
 
 async function loadReviews(propId) {
   const list = document.getElementById('reviewsList');
   const data = await api(`/api/auth/reviews/?property=${propId}`);
-
   if (!data || !data.results || data.results.length === 0) {
     list.innerHTML = '<p class="no-reviews">No reviews yet. Be the first!</p>';
     return;
   }
-
   document.getElementById('reviewBadge').textContent = `(${data.count})`;
   list.innerHTML = data.results.map(r => `
     <div class="review-card">
       <div class="review-header">
-        <div class="review-avatar">${(r.reviewer_name || '?')[0].toUpperCase()}</div>
+        <div class="review-avatar">${(r.reviewer_name||'?')[0].toUpperCase()}</div>
         <div>
           <p class="reviewer-name">${r.reviewer_name}</p>
-          <p class="review-date">${new Date(r.created_at).toLocaleDateString('en-US', {year: 'numeric', month: 'long'})}</p>
+          <p class="review-date">${new Date(r.created_at).toLocaleDateString('en-US',{year:'numeric',month:'long'})}</p>
         </div>
-        <div class="review-stars">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</div>
+        <div class="review-stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
       </div>
       <p class="review-text">${r.comment}</p>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 loadProperty();
 </script>
+
+<style>
+.pay-step-header { display:flex; align-items:center; gap:12px; margin-bottom:1.2rem; padding-bottom:1rem; border-bottom:1px solid var(--border); }
+.pay-step-icon { width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--gold)); display:flex; align-items:center; justify-content:center; font-size:1.2rem; flex-shrink:0; }
+.pay-step-title { font-weight:700; font-size:0.95rem; }
+.pay-step-sub { font-size:0.78rem; color:var(--text2); margin-top:2px; }
+.pay-info-row { display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border); font-size:0.84rem; }
+.pay-label { color:var(--text2); }
+.pay-val { font-weight:600; }
+.pay-val.gold { color:var(--gold); }
+.pay-address-label { font-size:0.75rem; color:var(--text2); margin:10px 0 4px; }
+.pay-address-box { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-family:monospace; font-size:0.72rem; word-break:break-all; color:var(--text2); cursor:pointer; }
+.pay-copy-btn { width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text2); padding:7px; border-radius:8px; font-size:0.78rem; cursor:pointer; margin-top:4px; font-family:'DM Sans',sans-serif; transition:all 0.2s; }
+.pay-copy-btn:hover { border-color:var(--gold); color:var(--gold); }
+.pay-timer { text-align:center; font-size:0.8rem; color:var(--text2); margin:10px 0; }
+.pay-steps { display:flex; flex-direction:column; gap:6px; margin:12px 0; }
+.pay-step-item { font-size:0.78rem; color:var(--text2); padding:5px 8px; border-radius:6px; transition:all 0.3s; }
+.pay-step-item.done { color:var(--green); }
+.confirming-box { text-align:center; padding:1.5rem 0; }
+.confirming-spinner { width:48px; height:48px; border:3px solid var(--border); border-top-color:var(--gold); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 1rem; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.confirming-title { font-size:1.1rem; font-weight:700; margin-bottom:4px; }
+.confirming-sub { font-size:0.82rem; color:var(--text2); margin-bottom:1.2rem; }
+.confirming-steps { display:flex; flex-direction:column; gap:8px; text-align:left; }
+.cs-row { font-size:0.82rem; color:var(--text2); padding:6px 10px; border-radius:6px; transition:all 0.4s; }
+.cs-row.done { color:var(--green); }
+.cs-row.active { color:var(--gold); }
+.success-box { text-align:center; padding:1.5rem 0; }
+.success-icon { width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,#1a6b3c,#2ecc71); display:flex; align-items:center; justify-content:center; font-size:1.6rem; color:white; margin:0 auto 1rem; }
+.success-title { font-size:1.2rem; font-weight:700; margin-bottom:6px; }
+.success-sub { font-size:0.84rem; color:var(--text2); line-height:1.5; }
+</style>
 {% endblock %}

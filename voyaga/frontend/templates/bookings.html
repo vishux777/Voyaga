@@ -83,7 +83,11 @@ function filterBookings(status, btn) {
 async function cancelBooking(id) {
   if (!confirm('Cancel this booking? You will receive a full refund.')) return;
   const result = await api(`/api/bookings/${id}/cancel/`, 'POST', {});
-  if (result) { showToast(result.message, 'success'); loadBookings(); }
+  if (result) {
+    showToast(result.message, 'success');
+    await refreshWallet();
+    loadBookings();
+  }
 }
 
 function showReviewForm(bookingId, propId) {
