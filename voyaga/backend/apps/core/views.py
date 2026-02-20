@@ -22,10 +22,7 @@ class RegisterView(APIView):
             AuditLog.log(user, 'register', request=request)
             return Response({
                 'user': UserSerializer(user).data,
-                'tokens': {
-                    'access': str(refresh.access_token),
-                    'refresh': str(refresh),
-                }
+                'tokens': {'access': str(refresh.access_token), 'refresh': str(refresh)}
             }, status=201)
         return Response(serializer.errors, status=400)
 
@@ -41,10 +38,7 @@ class LoginView(APIView):
             AuditLog.log(user, 'login', request=request)
             return Response({
                 'user': UserSerializer(user).data,
-                'tokens': {
-                    'access': str(refresh.access_token),
-                    'refresh': str(refresh),
-                }
+                'tokens': {'access': str(refresh.access_token), 'refresh': str(refresh)}
             })
         return Response(serializer.errors, status=400)
 
@@ -56,18 +50,12 @@ class VerifyOTPView(APIView):
         code = request.data.get('code')
         if not code:
             return Response({'error': 'OTP code required'}, status=400)
-
         expiry = timezone.now() - timedelta(minutes=10)
         otp = OTPCode.objects.filter(
-            user=request.user,
-            code=code,
-            is_used=False,
-            created_at__gte=expiry
+            user=request.user, code=code, is_used=False, created_at__gte=expiry
         ).first()
-
         if not otp:
             return Response({'error': 'Invalid or expired OTP'}, status=400)
-
         otp.is_used = True
         otp.save()
         request.user.is_verified = True
@@ -115,74 +103,161 @@ class AIChatView(APIView):
 
     def post(self, request):
         message = request.data.get('message', '').strip()
+        history = request.data.get('history', [])
         if not message:
             return Response({'error': 'Message required'}, status=400)
 
-        reply = self._smart_reply(message.lower())
+        # Try Anthropic API first
+        try:
+            reply = self._claude_reply(message, history, request.user)
+            return Response({'reply': reply})
+        except Exception:
+            pass
+
+        # Fallback to smart replies
+        reply = self._smart_reply(message.lower(), request.user)
         return Response({'reply': reply})
 
-    def _smart_reply(self, msg):
-        import random
+    def _claude_reply(self, message, history, user):
+        """Use Anthropic Claude API for intelligent responses"""
+        import anthropic
+        from apps.properties.models import Property
+        from apps.bookings.models import Booking, Review as ReviewModel
 
-        if any(w in msg for w in ['hello', 'hi', 'hey', 'greet', 'good morning', 'good evening']):
-            return random.choice([
-                "Hello! I'm **Voya**, your AI travel companion on Voyaga! 🌍 I can help you discover luxury villas, budget studios, beachfront stays, and more — all bookable with crypto. Where would you like to go?",
-                "Hey there, traveller! 👋 I'm Voya, your personal AI concierge. Tell me your dream destination and I'll find the perfect stay for you!",
-            ])
+        # Gather live context from DB
+        props = Property.objects.filter(is_active=True).prefetch_related('reviews')[:12]
+        prop_context = []
+        for p in props:
+            avg = p.avg_rating
+            prop_context.append(
+                f"- {p.title} | {p.city}, {p.country} | ${p.price_per_night}/night | "
+                f"{p.property_type} | {p.max_guests} guests | Rating: {avg or 'New'}"
+            )
 
-        if any(w in msg for w in ['luxury', 'villa', 'penthouse', 'premium', 'high end', 'upscale']):
-            return "🏛️ **Luxury Collection on Voyaga:**\n\nOur finest properties include:\n• **Santorini Cliffside Villa** — $420/night, infinity pool + caldera views\n• **Maldives Overwater Bungalow** — $650/night, glass floor, private lagoon\n• **Swiss Alps Chalet** — $380/night, ski-in/ski-out\n• **Bali Jungle Retreat** — $280/night, private pool + yoga pavilion\n\nAll accept crypto. Want me to refine by destination or budget?"
+        # Recent reviews for context
+        recent_reviews = ReviewModel.objects.select_related('prop', 'reviewer').order_by('-created_at')[:8]
+        review_context = [
+            f"- {r.reviewer.first_name or r.reviewer.username} gave {r.prop.title} "
+            f"{r.rating}★: \"{r.comment[:80]}\"" for r in recent_reviews
+        ]
 
-        if any(w in msg for w in ['budget', 'cheap', 'affordable', 'cheap', 'low cost', 'inexpensive']):
-            return "💰 **Budget-Friendly Stays on Voyaga:**\n\nGreat value options starting from:\n• **Tokyo Studio** — $85/night, city center, fast wifi\n• **Copenhagen Apartment** — $95/night, design district\n• **Bali Studio** — $75/night, rice field views\n• **New York Apartment** — $110/night, Manhattan\n\nAll include free cancellation. Which city interests you?"
+        # User context
+        user_bookings = Booking.objects.filter(guest=user).select_related('listing').order_by('-created_at')[:3]
+        user_context = f"User: {user.get_full_name() or user.username}, Role: {user.role}, " \
+                       f"Loyalty: {getattr(user, 'loyalty_tier', 'Explorer')} " \
+                       f"({getattr(user, 'loyalty_points', 0)} pts)"
+        if user_bookings:
+            past = [b.listing.title for b in user_bookings]
+            user_context += f", Past bookings: {', '.join(past)}"
 
-        if any(w in msg for w in ['beach', 'ocean', 'sea', 'coastal', 'maldives', 'santorini', 'bali']):
-            return "🌊 **Beach & Coastal Properties:**\n\n• **Maldives** — Overwater bungalows from $450/night\n• **Santorini, Greece** — Cliffside villas from $320/night\n• **Bali, Indonesia** — Beachfront villas from $150/night\n• **Amalfi Coast** — Sea-view apartments from $180/night\n\nCrystal waters, private pools, and full crypto payment support. Interested in any of these?"
+        system_prompt = f"""You are Voya, the friendly and knowledgeable AI travel concierge for Voyaga — a luxury travel platform where properties are booked with cryptocurrency.
 
-        if any(w in msg for w in ['book', 'booking', 'reserve', 'how to book', 'how do i book']):
-            return "📋 **How to Book on Voyaga:**\n\n1. Browse properties on the **Stays** page\n2. Select your dates and guest count\n3. Choose your cryptocurrency (BTC, ETH, USDT, SOL, and more)\n4. Send payment to the generated wallet address\n5. Confirm payment — booking is instantly confirmed ✅\n\nNo banks, no credit cards. Pure crypto. Need help with anything specific?"
+PLATFORM FACTS:
+- Accepts: Bitcoin, Ethereum, USDT, Solana, Litecoin, BNB, Dogecoin
+- Instant full refunds on cancellation
+- Hosts earn 97% of every booking, paid instantly on confirmation
+- Anyone can list their property — auto-promoted to host
+- Carbon footprint tracker shows CO₂, energy, water per booking
+- Loyalty program: Explorer → Silver (500pts) → Gold (2000pts) → Platinum (5000pts)
+- 1 loyalty point per $1 spent. Points = discounts on future bookings
+- Verified reviews only — guests who completed a stay
+- Help email: help@voyaga.com
 
-        if any(w in msg for w in ['cancel', 'refund', 'cancellation']):
-            return "✅ **Voyaga Cancellation Policy:**\n\nWe offer **instant full refunds** on all cancellations:\n• Cancel any confirmed booking from your dashboard\n• Refund goes immediately to your Voyaga wallet\n• No fees, no waiting period\n• Wallet balance can be withdrawn to any crypto address\n\nSimple, fair, and instant — that's how it should be."
+CURRENT PROPERTIES ON VOYAGA:
+{chr(10).join(prop_context) if prop_context else 'No properties listed yet.'}
 
-        if any(w in msg for w in ['crypto', 'bitcoin', 'ethereum', 'payment', 'pay', 'currency']):
-            return "₿ **Crypto Payments on Voyaga:**\n\nWe accept 7 cryptocurrencies:\n• **Bitcoin (BTC)** — Most trusted\n• **Ethereum (ETH)** — Fast & popular\n• **USDT (TRC-20)** — Stable, no volatility\n• **Solana (SOL)** — Ultra-fast, low fees\n• **Litecoin (LTC)** — Quick settlement\n• **BNB** — BNB Smart Chain\n• **Dogecoin (DOGE)** — Community favourite\n\nAll transactions verified on-chain. Zero hidden fees."
+RECENT GUEST REVIEWS:
+{chr(10).join(review_context) if review_context else 'No reviews yet.'}
 
-        if any(w in msg for w in ['host', 'list', 'listing', 'rent out', 'my property', 'become a host']):
-            return "🏠 **Become a Host on Voyaga:**\n\n1. Click **Host** in the navigation bar\n2. Fill in your property details and photos\n3. Your listing goes live instantly\n4. Earn **97% of every booking** — direct to your wallet\n\nAny authenticated user can list — no approval needed. Start earning crypto from your property today!"
+CURRENT USER:
+{user_context}
 
-        if any(w in msg for w in ['paris', 'france']):
-            return "🗼 **Paris, France:**\n\nVoyaga has curated Haussmann apartments in Le Marais, studios near the Eiffel Tower, and loft-style penthouses in Saint-Germain. Prices from $120/night. Perfect for romantic getaways or solo exploration. Shall I show you available dates?"
+Be conversational, warm, and helpful. Give specific property recommendations when asked. 
+Format responses with **bold** for emphasis and use relevant emojis. Keep replies concise but informative (under 200 words).
+If asked about a specific property, give real details from the list above.
+If asked about reviews, reference actual reviews above."""
 
-        if any(w in msg for w in ['tokyo', 'japan']):
-            return "🗾 **Tokyo, Japan:**\n\nChoose from minimalist studios in Shinjuku, traditional machiya homes in Yanaka, or modern apartments in Shibuya. From $85/night. Best visited March–May (cherry blossoms) or Oct–Nov. Interested?"
+        # Build message history for Claude
+        messages = []
+        for h in history[-8:]:  # last 8 exchanges
+            if h.get('role') in ('user', 'assistant') and h.get('content'):
+                messages.append({'role': h['role'], 'content': h['content']})
+        messages.append({'role': 'user', 'content': message})
 
-        if any(w in msg for w in ['review', 'rating', 'trust', 'verified']):
-            return "⭐ **Verified Reviews on Voyaga:**\n\nEvery review is from a real guest who completed a verified stay. No fake reviews, no paid placements — ever. Guests can also upload photos with their reviews for extra authenticity.\n\nOur average rating across all properties is 4.7/5 ⭐"
+        client = anthropic.Anthropic(
+            api_key=self._get_api_key()
+        )
+        response = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=400,
+            system=system_prompt,
+            messages=messages
+        )
+        return response.content[0].text
 
-        if any(w in msg for w in ['carbon', 'environment', 'eco', 'green', 'sustainable', 'footprint']):
-            return "🌱 **Carbon Footprint Tracking:**\n\nEvery Voyaga booking shows your environmental impact:\n• ✈️ **Travel emissions** — CO₂ per stay\n• ⚡ **Energy usage** — kWh per night\n• 💧 **Water consumption** — litres per night\n\nWe calculate this based on property type, location, and amenities. Choose lower-impact properties and travel more consciously!"
+    def _get_api_key(self):
+        import os
+        from django.conf import settings
+        key = getattr(settings, 'ANTHROPIC_API_KEY', None) or os.environ.get('ANTHROPIC_API_KEY', '')
+        if not key:
+            raise ValueError('No Anthropic API key configured')
+        return key
 
-        if any(w in msg for w in ['security', 'safe', 'secure', 'trust']):
-            return "🔐 **Voyaga Security Standards:**\n\n• **JWT Authentication** — Short-lived tokens, auto-refresh\n• **On-chain verification** — Every payment verified on blockchain\n• **Full audit logs** — Every action timestamped and logged\n• **OTP email verification** — Account security on signup\n• **Role-based access** — Guests, hosts, and admins fully separated\n• **Encrypted passwords** — PBKDF2 hashing, never plaintext\n\nYour data and funds are always protected."
+    def _smart_reply(self, msg, user=None):
+        """Fallback smart reply when API is unavailable"""
+        from apps.properties.models import Property
 
-        if any(w in msg for w in ['recommend', 'suggest', 'best', 'top', 'popular']):
-            return "✨ **Top Picks Right Now:**\n\n🏝️ **Maldives Overwater Bungalow** — $650/night · Glass floor, private lagoon\n🏛️ **Santorini Cliffside Villa** — $420/night · Infinity pool, caldera views\n🌿 **Bali Jungle Retreat** — $280/night · Private pool, yoga pavilion\n🗼 **Paris Le Marais Loft** — $195/night · 5-min walk to the Louvre\n\nAll bookable instantly with crypto. Want details on any of these?"
+        props = Property.objects.filter(is_active=True)[:6]
+        prop_names = [f"{p.title} in {p.city} (${p.price_per_night}/night)" for p in props]
+        prop_list  = '\n'.join([f'• {n}' for n in prop_names]) if prop_names else '• No listings yet'
 
-        if any(w in msg for w in ['thank', 'thanks', 'bye', 'goodbye', 'great', 'awesome', 'perfect']):
-            return random.choice([
-                "You're so welcome! 🌟 Have an amazing trip — Voyaga will be here whenever you're ready to explore again. Safe travels! ✈️",
-                "Happy to help! 😊 Whenever you're ready to book your next adventure, just ask. Bon voyage! 🌍",
-            ])
+        user_name = user.first_name or 'traveller' if user else 'traveller'
+        tier = getattr(user, 'loyalty_tier', 'Explorer') if user else 'Explorer'
+        pts  = getattr(user, 'loyalty_points', 0) if user else 0
 
-        if any(w in msg for w in ['withdraw', 'wallet', 'balance', 'payout']):
-            return "💸 **Voyaga Wallet & Withdrawals:**\n\nYour Voyaga wallet holds your balance from refunds and host payouts. You can withdraw anytime:\n• Minimum withdrawal: $10\n• Supported: BTC, ETH, USDT, LTC, BNB, SOL, DOGE\n• Processing time: within 24 hours\n\nGo to **Profile → Withdraw** to cash out."
+        if any(w in msg for w in ['hello', 'hi', 'hey']):
+            return (f"Hello {user_name}! 👋 I'm **Voya**, your AI travel concierge. "
+                    f"You're a **{tier}** member with **{pts} loyalty points**! "
+                    f"How can I help you plan your next adventure? ✈️")
 
-        return random.choice([
-            "Great question! 🌍 Tell me more — are you looking for a specific destination, property type, or budget range? I'll find the perfect match for you.",
-            "I'd love to help you plan that trip! Could you share a destination or travel dates? Voyaga has incredible properties worldwide. 🗺️",
-            "Hmm, let me think about that! 🤔 For best results, tell me: **Where** do you want to go, **when**, and what's your **budget**?",
-        ])
+        if any(w in msg for w in ['luxury', 'villa', 'penthouse', 'premium']):
+            return f"🏛️ **Luxury options on Voyaga:**\n\n{prop_list}\n\nAll bookable with crypto. Want to explore any of these?"
+
+        if any(w in msg for w in ['loyalty', 'points', 'tier', 'rewards']):
+            return (f"🏆 **Your Loyalty Status:**\n\n"
+                    f"Tier: **{tier}** | Points: **{pts}**\n\n"
+                    f"• Explorer: 0 pts\n• Silver: 500 pts (5% off)\n"
+                    f"• Gold: 2,000 pts (7% off)\n• Platinum: 5,000 pts (10% off)\n\n"
+                    f"You earn **1 point per $1** spent on bookings!")
+
+        if any(w in msg for w in ['wishlist', 'saved', 'favourite', 'favorite']):
+            return "❤️ **Wishlist Feature:**\n\nHeart any property to save it! Access your saved properties from your profile. Perfect for planning future trips."
+
+        if any(w in msg for w in ['carbon', 'environment', 'eco', 'green']):
+            return ("🌱 **Carbon Footprint Tracking:**\n\n"
+                    "Every booking shows your environmental impact:\n"
+                    "• ✈️ CO₂ emissions per stay\n• ⚡ Energy usage (kWh)\n• 💧 Water consumption (L)\n\n"
+                    "Choose greener properties and travel consciously!")
+
+        if any(w in msg for w in ['cancel', 'refund']):
+            return "✅ **Instant refunds** on all cancellations — money back to your wallet immediately. No fees, no waiting."
+
+        if any(w in msg for w in ['book', 'how', 'payment', 'crypto']):
+            return ("₿ **How to book:**\n\n1. Pick dates & guests\n2. Choose crypto (BTC/ETH/USDT/SOL...)\n"
+                    "3. Send to generated address\n4. Confirm — instantly booked! ✅\n\n"
+                    "Host gets 97% payout immediately on confirmation.")
+
+        if any(w in msg for w in ['host', 'list', 'earn']):
+            return ("🏠 **Become a host:**\n\n• List your property in minutes\n"
+                    "• Earn **97% of every booking** — paid instantly\n"
+                    "• No approval needed\n• Crypto payouts directly to your wallet")
+
+        if any(w in msg for w in ['available', 'properties', 'stays', 'show']):
+            return f"🌍 **Current listings on Voyaga:**\n\n{prop_list}"
+
+        return (f"I'd love to help! Tell me your **destination**, **dates**, or **budget** "
+                f"and I'll find the perfect stay. 🗺️\n\nOr ask me about:\n"
+                f"• 🏆 Your loyalty points\n• ₿ Crypto payments\n• 🌱 Carbon footprint\n• ❤️ Wishlist")
 
 
 class NotificationListView(APIView):
@@ -191,19 +266,14 @@ class NotificationListView(APIView):
     def get(self, request):
         notifs = Notification.objects.filter(user=request.user)[:30]
         data = [{
-            'id': n.id,
-            'title': n.title,
-            'message': n.message,
-            'type': n.notif_type,
-            'link': n.link,
-            'is_read': n.is_read,
-            'created_at': n.created_at.isoformat(),
+            'id': n.id, 'title': n.title, 'message': n.message,
+            'type': n.notif_type, 'link': n.link,
+            'is_read': n.is_read, 'created_at': n.created_at.isoformat(),
         } for n in notifs]
         unread = Notification.objects.filter(user=request.user, is_read=False).count()
         return Response({'results': data, 'unread': unread})
 
     def post(self, request):
-        # Mark all as read
         Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
         return Response({'message': 'All marked as read'})
 

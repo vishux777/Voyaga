@@ -39,6 +39,10 @@ class Booking(models.Model):
             qs = qs.exclude(id=exclude_id)
         return qs.exists()
 
+    @property
+    def nights(self):
+        return (self.check_out - self.check_in).days
+
 
 class Review(models.Model):
     reviewer = models.ForeignKey(
@@ -47,7 +51,6 @@ class Review(models.Model):
     prop = models.ForeignKey(
         'properties.Property', on_delete=models.CASCADE, related_name='reviews'
     )
-    # Nullable so reviews can be posted from property page without a booking
     booking = models.OneToOneField(
         Booking,
         on_delete=models.SET_NULL,
@@ -64,3 +67,19 @@ class Review(models.Model):
 
     def __str__(self):
         return f"{self.reviewer.email} → {self.prop.title} ({self.rating}★)"
+
+
+class Wishlist(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='wishlist'
+    )
+    property = models.ForeignKey(
+        Property, on_delete=models.CASCADE, related_name='wishlisted_by'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'property')
+
+    def __str__(self):
+        return f"{self.user.email} ♥ {self.property.title}"

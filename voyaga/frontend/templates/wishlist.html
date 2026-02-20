@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% block title %}My Wishlist — Voyaga{% endblock %}
+{% block content %}
+<div class="page-container">
+  <div class="page-header-row">
+    <div>
+      <h1 class="page-title">❤️ My Wishlist</h1>
+      <p style="color:var(--text2);font-size:0.88rem;margin-top:4px;">Properties you've saved for later</p>
+    </div>
+    <a href="/properties" class="btn-primary">Browse More Stays</a>
+  </div>
+  <div id="wishlistContainer">
+    <div class="skeleton-card"></div>
+    <div class="skeleton-card"></div>
+    <div class="skeleton-card"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+if (!getToken()) { showModal('loginModal'); }
+
+async function loadWishlist() {
+  const data = await api('/api/bookings/wishlist/');
+  const container = document.getElementById('wishlistContainer');
+  if (!data || !data.results || data.results.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state-full">
+        <span style="font-size:3rem;">❤️</span>
+        <p style="margin-top:1rem;font-size:1rem;">Your wishlist is empty.</p>
+        <p style="color:var(--text2);font-size:0.85rem;">Heart any property to save it here.</p>
+        <a href="/properties" class="btn-primary" style="margin-top:1.2rem;display:inline-block;">Browse Stays →</a>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="properties-grid">${data.results.map(p => `
+    <div class="property-card" style="position:relative;">
+      <div onclick="window.location.href='/property/${p.id}'" style="cursor:pointer;">
+        <div class="card-image">
+          ${p.primary_image_url
+            ? `<img src="${p.primary_image_url}" alt="${p.title}" loading="lazy">`
+            : '<div class="card-no-img">🏠</div>'}
+          <div class="card-type-badge">${p.property_type}</div>
+          <button class="wishlist-remove-btn" onclick="removeFromWishlist(event, ${p.id})" title="Remove from wishlist">❤️</button>
+        </div>
+        <div class="card-body">
+          <div class="card-location">📍 ${p.city}, ${p.country}</div>
+          <div class="card-title">${p.title}</div>
+          <div class="card-specs">
+            <span>👥 ${p.max_guests}</span>
+            <span>🛏 ${p.bedrooms}bd</span>
+            <span>🚿 ${p.bathrooms}ba</span>
+          </div>
+          <div class="card-footer">
+            <div class="card-price">$${parseFloat(p.price_per_night).toFixed(0)}<span class="card-price-night">/night</span></div>
+            <div class="card-rating">${p.avg_rating ? `★ ${p.avg_rating}` : '✦ New'}</div>
+          </div>
+        </div>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+async function removeFromWishlist(e, propId) {
+  e.stopPropagation();
+  await api('/api/bookings/wishlist/', 'POST', { property: propId });
+  loadWishlist();
+  showToast('Removed from wishlist', 'success');
+}
+
+loadWishlist();
+</script>
+<style>
+.wishlist-remove-btn {
+  position:absolute; top:10px; right:10px;
+  background:rgba(0,0,0,0.6); border:none; border-radius:50%;
+  width:32px; height:32px; cursor:pointer; font-size:0.9rem;
+  display:flex; align-items:center; justify-content:center;
+  transition:transform 0.2s;
+}
+.wishlist-remove-btn:hover { transform:scale(1.15); }
+</style>
+{% endblock %}

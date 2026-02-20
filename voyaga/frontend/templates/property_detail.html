@@ -1,549 +1,429 @@
 {% extends 'base.html' %}
 {% block title %}Property — Voyaga{% endblock %}
 {% block content %}
-
-<div class="detail-container" id="detailContainer">
-  <div class="detail-skeleton">Loading...</div>
+<div class="page-container" style="max-width:1100px;">
+  <div id="propLoading" style="text-align:center;padding:4rem;"><div class="spinner"></div></div>
+  <div id="propContent" class="hidden"></div>
 </div>
-
+<div class="lightbox hidden" id="lightbox" onclick="closeLightbox()">
+  <button class="lb-close" onclick="closeLightbox()">✕</button>
+  <button class="lb-prev" onclick="lbNav(-1,event)">‹</button>
+  <img id="lightboxImg" src="" alt="">
+  <button class="lb-next" onclick="lbNav(1,event)">›</button>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
 const propId = window.location.pathname.split('/').filter(Boolean).pop();
+let propData = null, lbImages = [], lbIndex = 0, blockedDates = [], selectedRating = 0, guestCount = 2, selectedCrypto = 'btc';
 
-// Carbon footprint calculator
-function calcCarbon(prop, nights) {
-  const typeFactors = {
-    villa: { co2: 18, energy: 35, water: 280 },
-    apartment: { co2: 8, energy: 18, water: 180 },
-    house: { co2: 14, energy: 28, water: 230 },
-    cabin: { co2: 6, energy: 12, water: 120 },
-    studio: { co2: 5, energy: 14, water: 150 },
-    penthouse: { co2: 22, energy: 45, water: 320 },
-  };
-  const f = typeFactors[prop.property_type?.toLowerCase()] || { co2: 10, energy: 20, water: 200 };
-  const amenityBonus = (prop.amenities || []).includes('pool') ? 1.4 : 1;
-  return {
-    co2: Math.round(f.co2 * nights * amenityBonus),
-    energy: Math.round(f.energy * nights),
-    water: Math.round(f.water * nights),
-    rating: f.co2 < 8 ? 'Low' : f.co2 < 16 ? 'Medium' : 'High',
-    color: f.co2 < 8 ? '#2ecc71' : f.co2 < 16 ? '#f39c12' : '#e74c3c',
-  };
+async function loadProperty() {
+  let data;
+  try {
+    const r = await fetch(`/api/properties/${propId}/`);
+    data = await r.json();
+  } catch(e) { data = null; }
+  if (!data || data.detail) {
+    document.getElementById('propLoading').innerHTML = '<div style="color:var(--text2);padding:4rem;text-align:center;">Property not found.</div>';
+    return;
+  }
+  propData = data;
+  renderProperty(data);
+  loadBlockedDates();
+  if (getToken()) checkWishlist();
 }
 
-function carbonBadge(prop, nights = 1) {
-  const c = calcCarbon(prop, nights);
-  return `
-    <div class="carbon-box">
-      <div class="carbon-title">🌱 Environmental Impact <span class="carbon-rating" style="color:${c.color};">${c.rating} Impact</span></div>
-      <div class="carbon-metrics">
-        <div class="carbon-metric">
-          <div class="cm-icon">✈️</div>
-          <div class="cm-val">${c.co2} kg</div>
-          <div class="cm-label">CO₂ / stay</div>
+async function loadBlockedDates() {
+  try {
+    const r = await fetch(`/api/bookings/availability/${propId}/`);
+    const d = await r.json();
+    blockedDates = d.blocked_dates || [];
+  } catch(e) { blockedDates = []; }
+  renderCalendar();
+}
+
+async function checkWishlist() {
+  const res = await api(`/api/bookings/wishlist/${propId}/check/`, 'GET', null, true);
+  if (res) updateHeartBtn(res.wishlisted);
+}
+
+function renderProperty(p) {
+  document.title = `${p.title} — Voyaga`;
+  const images = p.images || [];
+  lbImages = images.map(i => i.image_url);
+  const amIcons = { wifi:'📶',pool:'🏊',gym:'💪',parking:'🚗',kitchen:'🍳',ac:'❄️',heating:'🔥',tv:'📺',washer:'🧺',balcony:'🌅' };
+  const amenHtml = (p.amenities||[]).length
+    ? p.amenities.map(a=>`<span class="amenity-chip">${amIcons[a]||'✓'} ${a}</span>`).join('')
+    : '<span style="color:var(--text2);font-size:0.85rem;">No amenities listed</span>';
+  const carbon = calcCarbon(p);
+  document.getElementById('propLoading').classList.add('hidden');
+  const el = document.getElementById('propContent');
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div class="prop-gallery">
+      <div class="gallery-main" onclick="openLightbox(0)">
+        ${images[0]?`<img src="${images[0].image_url}" alt="${p.title}">`:'<div class="no-img-lg">🏠</div>'}
+      </div>
+      ${images.length>1?`<div class="gallery-grid">${images.slice(1,5).map((img,i)=>`
+        <div class="gallery-thumb" onclick="openLightbox(${i+1})">
+          <img src="${img.image_url}" alt="">
+          ${i===3&&images.length>5?`<div class="more-overlay">+${images.length-5}</div>`:''}
+        </div>`).join('')}</div>`:''}
+    </div>
+    <div class="prop-layout">
+      <div class="prop-left">
+        <div class="prop-header-row">
+          <div>
+            <div class="prop-type-badge">${p.property_type}</div>
+            <h1 class="prop-title">${p.title}</h1>
+            <div class="prop-meta-row">
+              <span>📍 ${p.city}, ${p.country}</span>
+              ${p.avg_rating?`<span>★ ${p.avg_rating} (${p.review_count} reviews)</span>`:'<span>✦ New listing</span>'}
+              <span>👤 ${p.host_name}</span>
+            </div>
+          </div>
+          <button class="heart-btn" id="heartBtn" onclick="toggleWishlist()">♡</button>
         </div>
-        <div class="carbon-metric">
-          <div class="cm-icon">⚡</div>
-          <div class="cm-val">${c.energy} kWh</div>
-          <div class="cm-label">Energy / stay</div>
+        <div class="prop-specs-row">
+          <div class="spec-item">👥 ${p.max_guests} guests</div>
+          <div class="spec-item">🛏 ${p.bedrooms} bed</div>
+          <div class="spec-item">🚿 ${p.bathrooms} bath</div>
+          <div class="spec-item">🏠 ${p.property_type}</div>
         </div>
-        <div class="carbon-metric">
-          <div class="cm-icon">💧</div>
-          <div class="cm-val">${c.water}L</div>
-          <div class="cm-label">Water / stay</div>
+        <div class="prop-section"><h3>About this place</h3><p style="color:var(--text2);line-height:1.75;font-size:0.92rem;">${p.description}</p></div>
+        <div class="prop-section"><h3>Amenities</h3><div class="amenities-wrap">${amenHtml}</div></div>
+        <div class="prop-section">
+          <h3>🌱 Carbon Footprint</h3>
+          <div class="carbon-box">
+            <div class="carbon-rating carbon-${carbon.rating.toLowerCase()}">${carbon.rating} Environmental Impact</div>
+            <div class="carbon-stats">
+              <div class="carbon-stat"><span>🌿</span><strong>${carbon.co2}kg</strong><span>CO₂/night</span></div>
+              <div class="carbon-stat"><span>⚡</span><strong>${carbon.energy}kWh</strong><span>energy/night</span></div>
+              <div class="carbon-stat"><span>💧</span><strong>${carbon.water}L</strong><span>water/night</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="prop-section">
+          <h3>📅 Availability Calendar</h3>
+          <p style="font-size:0.78rem;color:var(--text2);margin-bottom:0.75rem;">Red = already booked. Green = available.</p>
+          <div id="calendarWrap"></div>
+        </div>
+        <div class="prop-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+            <h3 style="margin:0;">★ Reviews${p.review_count?` (${p.review_count})`:''}</h3>
+            ${getToken()?'<button class="btn-sm" onclick="toggleReviewForm()">Write Review</button>':''}
+          </div>
+          <div id="reviewFormWrap" class="hidden" style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:1.2rem;margin-bottom:1.5rem;">
+            <div id="starPicker">${[1,2,3,4,5].map(n=>`<span onclick="setRating(${n})" style="font-size:1.6rem;cursor:pointer;color:var(--text2);">☆</span>`).join('')}</div>
+            <textarea id="reviewComment" rows="3" placeholder="Share your experience..." style="width:100%;margin-top:0.75rem;resize:vertical;"></textarea>
+            <button class="btn-primary" style="margin-top:0.75rem;width:100%;" onclick="submitReview()">Submit Review</button>
+          </div>
+          <div id="reviewsList"><div style="color:var(--text2);font-size:0.85rem;text-align:center;padding:1.5rem;">Loading...</div></div>
+        </div>
+      </div>
+      <div class="prop-right">
+        <div class="booking-card">
+          <div class="booking-price">$${parseFloat(p.price_per_night).toFixed(0)}<span class="booking-price-night">/night</span></div>
+          <div class="date-inputs">
+            <div class="date-inp-group"><label>CHECK-IN</label><input type="date" id="checkIn" onchange="updateCalc()"></div>
+            <div class="date-inp-group"><label>CHECK-OUT</label><input type="date" id="checkOut" onchange="updateCalc()"></div>
+          </div>
+          <div class="guests-row">
+            <label style="font-size:0.72rem;color:var(--text2);text-transform:uppercase;">Guests</label>
+            <div class="guests-counter">
+              <button onclick="changeGuests(-1)" type="button">−</button>
+              <span id="guestCount">2</span>
+              <button onclick="changeGuests(1)" type="button">+</button>
+            </div>
+          </div>
+          <div id="availStatus" style="font-size:0.8rem;margin:6px 0;min-height:18px;"></div>
+          <div id="bookSummary" class="hidden">
+            <div class="b-line"><span id="nightsLbl"></span><span id="nightsTot"></span></div>
+            <div class="b-line" style="color:#2ecc71;font-size:0.76rem;" id="carbonLbl"></div>
+            <div class="b-line" style="color:var(--gold);font-size:0.76rem;" id="pointsLbl"></div>
+            <hr style="border-color:var(--border);margin:10px 0;">
+            <div class="b-line" style="font-weight:700;font-size:1rem;"><span>Total</span><span id="bookTotal"></span></div>
+          </div>
+          <div id="cryptoSel" class="hidden" style="margin:0.8rem 0;">
+            <div style="font-size:0.7rem;color:var(--text2);text-transform:uppercase;margin-bottom:6px;">Pay with crypto</div>
+            <div class="crypto-pills-row">
+              ${['btc','eth','usdt','sol','ltc','bnb','doge'].map((c,i)=>`
+                <button class="cpill ${i===0?'active':''}" onclick="pickCrypto('${c}',this)">${c.toUpperCase()}</button>`).join('')}
+            </div>
+          </div>
+          <button class="btn-primary w-full" id="bookBtn" onclick="initiateBooking(${p.id})">Reserve Now</button>
+          <p style="text-align:center;font-size:0.73rem;color:var(--text2);margin-top:6px;">You won't be charged yet</p>
         </div>
       </div>
     </div>`;
+  loadReviews();
 }
 
-async function loadProperty() {
-  const data = await api(`/api/properties/${propId}/`);
-  if (!data) {
-    document.getElementById('detailContainer').innerHTML = '<p class="error-msg">Property not found</p>';
-    return;
+// ── CALENDAR ──────────────────────────────────────────────────
+let calY, calM;
+function renderCalendar(dy=0, dm=0) {
+  const now = new Date();
+  if (!calY) { calY=now.getFullYear(); calM=now.getMonth(); }
+  calM += dm;
+  while(calM<0){calM+=12;calY--;}
+  while(calM>11){calM-=12;calY++;}
+  const wrap = document.getElementById('calendarWrap');
+  if(!wrap) return;
+  const first = new Date(calY,calM,1).getDay();
+  const days  = new Date(calY,calM+1,0).getDate();
+  const mName = new Date(calY,calM).toLocaleString('default',{month:'long',year:'numeric'});
+  let h = `<div class="cal-nav"><button onclick="renderCalendar(0,-1)">‹</button><span>${mName}</span><button onclick="renderCalendar(0,1)">›</button></div>
+    <div class="cal-grid">
+      ${['Su','Mo','Tu','We','Th','Fr','Sa'].map(d=>`<div class="cal-hd">${d}</div>`).join('')}
+      ${'<div></div>'.repeat(first)}`;
+  const todayStr = now.toISOString().split('T')[0];
+  for(let d=1;d<=days;d++){
+    const ds=`${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const past=ds<todayStr, blocked=blockedDates.includes(ds);
+    h+=`<div class="cal-d ${past?'cal-past':blocked?'cal-blocked':'cal-avail'}">${d}</div>`;
   }
+  h+=`</div><div class="cal-leg"><span><span class="cldot" style="background:#2ecc71;opacity:.5;"></span>Available</span><span><span class="cldot" style="background:#e74c3c;opacity:.6;"></span>Booked</span></div>`;
+  wrap.innerHTML=h;
+}
 
-  const images = data.images || [];
-  const primaryImg = images.find(i => i.is_primary) || images[0];
+// ── WISHLIST ──────────────────────────────────────────────────
+async function toggleWishlist() {
+  if(!getToken()){showModal('loginModal');return;}
+  const res = await api('/api/bookings/wishlist/','POST',{property:propId});
+  if(res){updateHeartBtn(res.wishlisted);showToast(res.message,'success');}
+}
+function updateHeartBtn(on) {
+  const b=document.getElementById('heartBtn');
+  if(b){b.textContent=on?'❤️':'♡';b.classList.toggle('wishlisted',on);}
+}
 
-  document.getElementById('detailContainer').innerHTML = `
-    <div class="detail-header">
-      <div class="detail-breadcrumb"><a href="/">Home</a> / <a href="/properties">Stays</a> / ${data.city}</div>
-      <h1 class="detail-title">${data.title}</h1>
-      <div class="detail-meta">
-        <span class="rating-badge">★ ${data.avg_rating || 'New'}</span>
-        <span class="review-count">${data.review_count} reviews</span>
-        <span class="detail-location">📍 ${data.city}, ${data.country}</span>
-        <span class="detail-type">${data.property_type}</span>
-      </div>
-    </div>
+// ── GUESTS ────────────────────────────────────────────────────
+function changeGuests(d){
+  guestCount=Math.max(1,Math.min(propData?propData.max_guests:10,guestCount+d));
+  document.getElementById('guestCount').textContent=guestCount;
+  updateCalc();
+}
+function pickCrypto(c,btn){
+  selectedCrypto=c;
+  document.querySelectorAll('.cpill').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
 
-    <div class="detail-gallery">
-      <div class="gallery-main">
-        ${primaryImg ? `<img src="${primaryImg.image_url}" alt="${data.title}" id="mainImage">` : '<div class="no-image">🏠</div>'}
-      </div>
-      ${images.length > 1 ? `
-      <div class="gallery-thumbs">
-        ${images.map(img => `
-          <div class="thumb ${img.is_primary ? 'active' : ''}" onclick="setMainImage('${img.image_url}', this)">
-            <img src="${img.image_url}" alt="">
-          </div>`).join('')}
-      </div>` : ''}
-    </div>
+// ── BOOKING CALC ──────────────────────────────────────────────
+function updateCalc(){
+  const ci=document.getElementById('checkIn')?.value;
+  const co=document.getElementById('checkOut')?.value;
+  const sum=document.getElementById('bookSummary');
+  const stat=document.getElementById('availStatus');
+  const csel=document.getElementById('cryptoSel');
+  if(!ci||!co||!propData){sum?.classList.add('hidden');return;}
+  const nights=Math.round((new Date(co)-new Date(ci))/86400000);
+  if(nights<=0){stat.innerHTML='<span style="color:#e74c3c;">Check-out must be after check-in</span>';sum?.classList.add('hidden');return;}
+  let conflict=false;
+  for(let d=new Date(ci);d<new Date(co);d.setDate(d.getDate()+1)){
+    if(blockedDates.includes(d.toISOString().split('T')[0])){conflict=true;break;}
+  }
+  if(conflict){
+    stat.innerHTML='<span style="color:#e74c3c;">✗ Dates not available</span>';
+    sum?.classList.add('hidden');csel?.classList.add('hidden');return;
+  }
+  stat.innerHTML='<span style="color:#2ecc71;">✓ Available!</span>';
+  const total=nights*parseFloat(propData.price_per_night);
+  const c=calcCarbon(propData,nights);
+  document.getElementById('nightsLbl').textContent=`${nights} night${nights>1?'s':''}`;
+  document.getElementById('nightsTot').textContent=`$${total.toFixed(2)}`;
+  document.getElementById('bookTotal').textContent=`$${total.toFixed(2)}`;
+  document.getElementById('carbonLbl').textContent=`🌱 ${c.co2*nights}kg CO₂ · ⚡ ${c.energy*nights}kWh`;
+  document.getElementById('pointsLbl').textContent=`🏆 +${parseInt(total)} loyalty points earned`;
+  sum?.classList.remove('hidden');csel?.classList.remove('hidden');
+}
 
-    <div class="detail-body">
-      <div class="detail-left">
-        <div class="host-card">
-          <div class="host-avatar">${data.host?.first_name?.[0] || 'H'}</div>
+// ── BOOKING ───────────────────────────────────────────────────
+async function initiateBooking(pId){
+  if(!getToken()){showModal('loginModal');return;}
+  const ci=document.getElementById('checkIn')?.value;
+  const co=document.getElementById('checkOut')?.value;
+  if(!ci||!co){showToast('Select check-in and check-out dates','error');return;}
+  const btn=document.getElementById('bookBtn');
+  btn.disabled=true;btn.textContent='Processing...';
+  const result=await api('/api/bookings/initiate/','POST',{listing:pId,check_in:ci,check_out:co,guests_count:guestCount,currency:selectedCrypto});
+  btn.disabled=false;btn.textContent='Reserve Now';
+  if(result) showPaymentModal(result);
+}
+
+function showPaymentModal(p){
+  document.getElementById('payModal')?.remove();
+  const m=document.createElement('div');
+  m.id='payModal';m.className='modal-overlay';
+  m.innerHTML=`
+    <div class="modal" style="max-width:460px;">
+      <button class="modal-close" onclick="document.getElementById('payModal').remove()">✕</button>
+      <div class="modal-header"><div style="font-size:2rem;">₿</div><h2>Complete Payment</h2><p>${p.property} · ${p.nights} nights · $${p.amount_usd}</p></div>
+      <div id="pSteps">
+        <div class="pstep active" id="ps1">
+          <div class="pstep-num">1</div>
           <div>
-            <p class="host-label">Hosted by</p>
-            <p class="host-name">${data.host_name}</p>
+            <div class="pstep-title">Send ${p.pay_currency}</div>
+            <div style="font-size:0.75rem;color:var(--gold);margin-bottom:8px;">${p.network}</div>
+            <div class="pay-addr-box"><code>${p.pay_address}</code><button onclick="navigator.clipboard.writeText('${p.pay_address}');showToast('Copied!','success')" class="copy-btn">Copy</button></div>
+            <div style="font-size:1.5rem;font-weight:700;text-align:center;margin:8px 0;">${p.pay_amount} <span style="font-size:.9rem;color:var(--text2);">${p.pay_currency}</span></div>
+            <div style="font-size:0.75rem;color:var(--text2);text-align:center;">≈ $${p.amount_usd} USD</div>
           </div>
         </div>
-        <div class="detail-specs">
-          <div class="spec"><span>👥</span> Up to ${data.max_guests} guests</div>
-          <div class="spec"><span>🛏️</span> ${data.bedrooms} bedroom${data.bedrooms > 1 ? 's' : ''}</div>
-          <div class="spec"><span>🚿</span> ${data.bathrooms} bathroom${data.bathrooms > 1 ? 's' : ''}</div>
-        </div>
-        <div class="detail-section">
-          <h3>About this place</h3>
-          <p class="detail-description">${data.description}</p>
-        </div>
-        ${data.amenities?.length ? `
-        <div class="detail-section">
-          <h3>Amenities</h3>
-          <div class="amenities-grid">
-            ${data.amenities.map(a => `<div class="amenity-item">${amenityIcon(a)} ${a}</div>`).join('')}
-          </div>
-        </div>` : ''}
-
-        ${carbonBadge(data)}
-
-        <div class="detail-section" id="reviewsSection">
-          <div class="reviews-header">
-            <h3>★ Reviews <span id="reviewBadge"></span></h3>
-            <button class="btn-sm" onclick="toggleReviewForm()" id="writeReviewBtn">Write a Review</button>
-          </div>
-
-          <div id="reviewFormBox" class="hidden">
-            <div class="review-form-card">
-              <h4>Share your experience</h4>
-              <div class="star-picker" id="starPicker">
-                ${[1,2,3,4,5].map(n => `<span class="star-pick" data-val="${n}" onclick="setRating(${n})">☆</span>`).join('')}
-              </div>
-              <textarea id="reviewComment" rows="3" placeholder="Tell others about your stay..." style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.88rem;outline:none;resize:vertical;margin-top:0.75rem;"></textarea>
-
-              <div class="review-image-upload" style="margin-top:0.75rem;">
-                <label style="font-size:0.78rem;color:var(--text2);display:block;margin-bottom:6px;">📸 Add photos (optional)</label>
-                <div class="review-upload-area" onclick="document.getElementById('reviewImages').click()">
-                  <span>Click to upload photos</span>
-                  <input type="file" id="reviewImages" multiple accept="image/*" style="display:none" onchange="previewReviewImages(this)">
-                </div>
-                <div id="reviewImagePreviews" class="review-img-previews"></div>
-              </div>
-
-              <div style="display:flex;gap:8px;margin-top:0.75rem;">
-                <button class="btn-primary" onclick="submitReview(${data.id})" id="submitReviewBtn">Post Review</button>
-                <button class="btn-ghost" onclick="toggleReviewForm()" style="font-size:0.82rem;">Cancel</button>
-              </div>
-            </div>
-          </div>
-
-          <div id="reviewsList">Loading reviews...</div>
-        </div>
+        <div class="pstep" id="ps2"><div class="pstep-num">2</div><div><div class="pstep-title">Verifying on Blockchain</div><div style="color:var(--text2);font-size:.85rem;">Checking transaction...</div><div class="pay-loader"><div></div><div></div><div></div></div></div></div>
+        <div class="pstep" id="ps3"><div class="pstep-num">3</div><div><div class="pstep-title">Confirming Booking</div><div style="color:var(--text2);font-size:.85rem;">Reserving your dates...</div></div></div>
+        <div class="pstep" id="ps4"><div class="pstep-num" style="background:#2ecc71;">✓</div><div><div class="pstep-title" style="color:#2ecc71;">Booking Confirmed! 🎉</div><div style="color:var(--text2);font-size:.85rem;">Host notified & paid instantly. Loyalty points added!</div></div></div>
       </div>
-
-      <div class="detail-right">
-        <div class="booking-card" id="bookingCard">
-          <div id="step1">
-            <div class="booking-price">
-              <span class="price-big">$${parseFloat(data.price_per_night).toFixed(2)}</span>
-              <span class="price-night">/ night</span>
-            </div>
-            <div class="date-row">
-              <div class="date-field">
-                <label>CHECK-IN</label>
-                <input type="date" id="checkIn" required>
-              </div>
-              <div class="date-field">
-                <label>CHECK-OUT</label>
-                <input type="date" id="checkOut" required>
-              </div>
-            </div>
-            <div class="guest-field">
-              <label>GUESTS</label>
-              <input type="number" id="bookGuests" value="1" min="1" max="${data.max_guests}">
-            </div>
-            <div class="form-group" style="margin-top:0.75rem;">
-              <label style="font-size:0.65rem;font-weight:700;letter-spacing:0.08em;color:var(--text2);display:block;margin-bottom:6px;text-transform:uppercase;">Pay with</label>
-              <select id="bookCurrency" style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.88rem;outline:none;">
-                <option value="btc">₿ Bitcoin (BTC)</option>
-                <option value="eth">Ξ Ethereum (ETH)</option>
-                <option value="usdt">◎ Tether (USDT)</option>
-                <option value="ltc">Ł Litecoin (LTC)</option>
-                <option value="bnb">⬡ BNB</option>
-                <option value="sol">◎ Solana (SOL)</option>
-                <option value="doge">Ð Dogecoin (DOGE)</option>
-              </select>
-            </div>
-            <div class="price-summary hidden" id="priceSummary"></div>
-            <div id="carbonPreview" class="hidden" style="margin-bottom:0.75rem;"></div>
-            <button class="btn-primary w-full" id="bookBtn" onclick="initiateBooking(${data.id}, ${data.price_per_night})">
-              ₿ Pay with Crypto
-            </button>
-            <p class="booking-note">Powered by crypto — secure & instant</p>
-          </div>
-
-          <div id="step2" class="hidden">
-            <div class="pay-step-header">
-              <div class="pay-step-icon">₿</div>
-              <div>
-                <div class="pay-step-title">Send Payment</div>
-                <div class="pay-step-sub" id="payNetwork"></div>
-              </div>
-            </div>
-            <div class="pay-info-row"><span class="pay-label">Property</span><span class="pay-val" id="payPropName"></span></div>
-            <div class="pay-info-row"><span class="pay-label">Amount (USD)</span><span class="pay-val gold" id="payUSD"></span></div>
-            <div class="pay-info-row"><span class="pay-label">Send exactly</span><span class="pay-val gold" id="payCryptoAmount"></span></div>
-            <div class="pay-address-label">Send to this address:</div>
-            <div class="pay-address-box" id="payAddress" onclick="copyPayAddress()"></div>
-            <button class="pay-copy-btn" onclick="copyPayAddress()">📋 Copy Address</button>
-            <div class="pay-timer" id="payTimer">⏳ Expires in 60:00</div>
-            <div class="pay-steps">
-              <div class="pay-step-item done">✓ Payment address generated</div>
-              <div class="pay-step-item" id="psi2">◎ Waiting for transaction...</div>
-              <div class="pay-step-item" id="psi3">◎ Confirming on blockchain</div>
-              <div class="pay-step-item" id="psi4">◎ Booking confirmed</div>
-            </div>
-            <button class="btn-primary w-full" id="confirmPayBtn" onclick="confirmPayment()" style="margin-top:1rem;">✓ I've sent the payment</button>
-            <button class="btn-outline w-full" onclick="resetToStep1()" style="margin-top:0.5rem;font-size:0.82rem;">← Change dates</button>
-          </div>
-
-          <div id="step3" class="hidden">
-            <div class="confirming-box">
-              <div class="confirming-spinner"></div>
-              <div class="confirming-title">Verifying Payment</div>
-              <div class="confirming-sub">Checking blockchain confirmation...</div>
-              <div class="confirming-steps">
-                <div class="cs-row done">✓ Payment received</div>
-                <div class="cs-row active" id="cs2">⟳ Confirming transaction...</div>
-                <div class="cs-row" id="cs3">◎ Creating booking</div>
-              </div>
-            </div>
-          </div>
-
-          <div id="step4" class="hidden">
-            <div class="success-box">
-              <div class="success-icon">✓</div>
-              <div class="success-title">Booking Confirmed!</div>
-              <div class="success-sub">Your crypto payment was received and booking is confirmed.</div>
-              <div class="success-detail" id="successDetail"></div>
-              <a href="/bookings" class="btn-primary w-full" style="margin-top:1.25rem;display:block;text-align:center;text-decoration:none;">View My Bookings</a>
-            </div>
-          </div>
-        </div>
+      <div style="margin-top:1.2rem;display:flex;flex-direction:column;gap:8px;">
+        <button class="btn-primary w-full" onclick="doPayment('${p.payment_id}')">✓ I've Sent the Payment</button>
+        <button class="btn-ghost w-full" onclick="document.getElementById('payModal').remove()">Cancel</button>
       </div>
-    </div>
-  `;
-
-  const today = new Date().toISOString().split('T')[0];
-  const checkIn = document.getElementById('checkIn');
-  const checkOut = document.getElementById('checkOut');
-  checkIn.min = today;
-  checkOut.min = today;
-  checkIn.addEventListener('change', () => { checkOut.min = checkIn.value; updatePrice(data.price_per_night, data); });
-  checkOut.addEventListener('change', () => updatePrice(data.price_per_night, data));
-
-  loadReviews(data.id);
+    </div>`;
+  document.body.appendChild(m);
 }
 
-function amenityIcon(a) {
-  const icons = { wifi:'📶', pool:'🏊', gym:'💪', parking:'🚗', kitchen:'🍳', ac:'❄️', heating:'🔥', tv:'📺', washer:'🧺', balcony:'🌅' };
-  return icons[a] || '✓';
-}
-
-function setMainImage(url, el) {
-  document.getElementById('mainImage').src = url;
-  document.querySelectorAll('.thumb').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-}
-
-function updatePrice(pricePerNight, propData) {
-  const ci = document.getElementById('checkIn').value;
-  const co = document.getElementById('checkOut').value;
-  const summary = document.getElementById('priceSummary');
-  const carbonPreview = document.getElementById('carbonPreview');
-  if (ci && co && co > ci) {
-    const nights = Math.round((new Date(co) - new Date(ci)) / 86400000);
-    const total = nights * pricePerNight;
-    summary.innerHTML = `
-      <div class="price-row"><span>${nights} night${nights>1?'s':''} × $${parseFloat(pricePerNight).toFixed(2)}</span><span>$${total.toFixed(2)}</span></div>
-      <div class="price-row total"><span>Total</span><span>$${total.toFixed(2)}</span></div>`;
-    summary.classList.remove('hidden');
-
-    if (propData) {
-      const c = calcCarbon(propData, nights);
-      carbonPreview.innerHTML = `<div style="font-size:0.75rem;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;display:flex;gap:12px;justify-content:center;">
-        <span>🌱 ${c.co2}kg CO₂</span><span>⚡ ${c.energy}kWh</span><span>💧 ${c.water}L</span>
-      </div>`;
-      carbonPreview.classList.remove('hidden');
-    }
-  } else {
-    summary.classList.add('hidden');
-    carbonPreview.classList.add('hidden');
+async function doPayment(pid){
+  const steps=['ps1','ps2','ps3'];
+  for(let i=0;i<steps.length;i++){
+    await new Promise(r=>setTimeout(r,1200));
+    document.querySelectorAll('.pstep').forEach(s=>s.classList.remove('active'));
+    document.getElementById(steps[i])?.classList.add('done');
+    if(i<2) document.getElementById(steps[i+1])?.classList.add('active');
+  }
+  await new Promise(r=>setTimeout(r,1000));
+  document.querySelectorAll('.pstep').forEach(s=>s.classList.remove('active'));
+  document.getElementById('ps4')?.classList.add('active');
+  const result=await api(`/api/bookings/payment-status/${pid}/`,'POST',{});
+  if(result?.booking_created){
+    showToast(`🎉 Booking confirmed! +${result.points_earned||0} loyalty points earned!`,'success');
+    setTimeout(()=>{document.getElementById('payModal')?.remove();window.location.href='/bookings';},2500);
   }
 }
 
-// ── REVIEW SYSTEM ────────────────────────
-let selectedRating = 0;
-
-function setRating(val) {
-  selectedRating = val;
-  document.querySelectorAll('.star-pick').forEach((s, i) => {
-    s.textContent = i < val ? '★' : '☆';
-    s.style.color = i < val ? 'var(--gold)' : 'var(--text2)';
-  });
+// ── REVIEWS ───────────────────────────────────────────────────
+function toggleReviewForm(){document.getElementById('reviewFormWrap')?.classList.toggle('hidden');}
+function setRating(n){
+  selectedRating=n;
+  document.querySelectorAll('#starPicker span').forEach((s,i)=>{s.textContent=i<n?'★':'☆';s.style.color=i<n?'#f59e0b':'var(--text2)';});
 }
-
-function toggleReviewForm() {
-  if (!getToken()) { showModal('loginModal'); return; }
-  const box = document.getElementById('reviewFormBox');
-  box.classList.toggle('hidden');
-  selectedRating = 0;
-  document.querySelectorAll('.star-pick').forEach(s => { s.textContent = '☆'; s.style.color = 'var(--text2)'; });
-  document.getElementById('reviewComment').value = '';
-  document.getElementById('reviewImagePreviews').innerHTML = '';
+async function submitReview(){
+  if(!selectedRating){showToast('Select a rating','error');return;}
+  const comment=document.getElementById('reviewComment').value.trim();
+  if(!comment){showToast('Write a comment','error');return;}
+  const res=await api('/api/auth/reviews/','POST',{prop:propId,rating:selectedRating,comment});
+  if(res){showToast('Review submitted!','success');toggleReviewForm();loadReviews();}
 }
-
-function previewReviewImages(input) {
-  const container = document.getElementById('reviewImagePreviews');
-  container.innerHTML = '';
-  Array.from(input.files).slice(0, 4).forEach(file => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const img = document.createElement('img');
-      img.src = e.target.result;
-      img.className = 'review-preview-img';
-      container.appendChild(img);
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-async function submitReview(propId) {
-  if (!selectedRating) { showToast('Please select a rating', 'error'); return; }
-  const comment = document.getElementById('reviewComment').value.trim();
-  if (!comment) { showToast('Please write a comment', 'error'); return; }
-
-  const btn = document.getElementById('submitReviewBtn');
-  btn.disabled = true; btn.textContent = 'Posting...';
-
-  const result = await api('/api/auth/reviews/', 'POST', {
-    prop: propId,
-    rating: selectedRating,
-    comment: comment
-  });
-
-  btn.disabled = false; btn.textContent = 'Post Review';
-
-  if (result) {
-    showToast('Review posted! Thank you 🌟', 'success');
-    toggleReviewForm();
-    loadReviews(propId);
-  }
-}
-
-async function loadReviews(propId) {
-  const list = document.getElementById('reviewsList');
-  const data = await api(`/api/auth/reviews/?property=${propId}`);
-
-  if (!data || !data.results || data.results.length === 0) {
-    list.innerHTML = '<p class="no-reviews">No reviews yet. Be the first to share your experience!</p>';
-    document.getElementById('reviewBadge').textContent = '';
-    return;
-  }
-
-  document.getElementById('reviewBadge').textContent = `(${data.count})`;
-  list.innerHTML = data.results.map(r => `
-    <div class="review-card">
+async function loadReviews(){
+  let data;
+  try{const r=await fetch(`/api/auth/reviews/?prop=${propId}`);data=await r.json();}catch(e){data=null;}
+  const list=document.getElementById('reviewsList');
+  if(!list)return;
+  const reviews=data?.results||data||[];
+  if(!reviews.length){list.innerHTML='<div style="color:var(--text2);font-size:0.85rem;text-align:center;padding:1.5rem;">No reviews yet — be the first!</div>';return;}
+  list.innerHTML=reviews.map(r=>`
+    <div class="review-item">
       <div class="review-header">
-        <div class="review-avatar">${(r.reviewer_name||'?')[0].toUpperCase()}</div>
-        <div style="flex:1;">
-          <p class="reviewer-name">${r.reviewer_name}</p>
-          <p class="review-date">${new Date(r.created_at).toLocaleDateString('en-US',{year:'numeric',month:'long'})}</p>
-        </div>
-        <div class="review-stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
+        <div class="rev-av">${(r.reviewer_name||'G')[0].toUpperCase()}</div>
+        <div><div class="rev-name">${r.reviewer_name||'Guest'}</div><div class="rev-date">${new Date(r.created_at).toLocaleDateString('en',{month:'short',year:'numeric'})}</div></div>
+        <div style="margin-left:auto;color:#f59e0b;font-size:.85rem;">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
       </div>
-      <p class="review-text">${r.comment}</p>
-      ${r.images && r.images.length ? `
-        <div class="review-images">
-          ${r.images.map(img => `<img src="${img.image_url}" class="review-img-thumb" onclick="openReviewImg('${img.image_url}')">`).join('')}
-        </div>` : ''}
+      <p style="font-size:.85rem;color:var(--text2);line-height:1.6;margin:0;">${r.comment}</p>
     </div>`).join('');
 }
 
-function openReviewImg(url) {
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
-  overlay.innerHTML = `<img src="${url}" style="max-width:90vw;max-height:90vh;border-radius:12px;object-fit:contain;">`;
-  overlay.onclick = () => document.body.removeChild(overlay);
-  document.body.appendChild(overlay);
+// ── CARBON ────────────────────────────────────────────────────
+function calcCarbon(p,nights=1){
+  const f={villa:{co2:18,energy:45,water:320},apartment:{co2:8,energy:15,water:150},house:{co2:14,energy:30,water:220},cabin:{co2:6,energy:12,water:120},studio:{co2:5,energy:10,water:100},penthouse:{co2:22,energy:50,water:380}};
+  const t=f[p.property_type]||f['apartment'];
+  const m=(p.amenities||[]).includes('pool')?1.4:1;
+  return{co2:Math.round(t.co2*m*nights),energy:t.energy*nights,water:t.water*nights,rating:t.co2*m<8?'Low':t.co2*m<16?'Medium':'High'};
 }
 
-// ── BOOKING FLOW ─────────────────────────
-let currentPaymentId = null;
-let timerInterval = null;
-
-async function initiateBooking(propId, price) {
-  if (!getToken()) { showModal('loginModal'); return; }
-  const ci = document.getElementById('checkIn').value;
-  const co = document.getElementById('checkOut').value;
-  const guests = parseInt(document.getElementById('bookGuests').value);
-  const currency = document.getElementById('bookCurrency').value;
-  if (!ci || !co) { showToast('Please select dates', 'error'); return; }
-  if (co <= ci) { showToast('Check-out must be after check-in', 'error'); return; }
-
-  const btn = document.getElementById('bookBtn');
-  btn.disabled = true; btn.textContent = 'Generating address...';
-
-  const result = await api('/api/bookings/initiate/', 'POST', {
-    listing: parseInt(propId), check_in: ci, check_out: co, guests_count: guests, currency
-  });
-
-  btn.disabled = false; btn.textContent = '₿ Pay with Crypto';
-  if (!result || result.error) { showToast(result?.error || 'Failed to initiate payment', 'error'); return; }
-
-  currentPaymentId = result.payment_id;
-  document.getElementById('payPropName').textContent = result.property;
-  document.getElementById('payUSD').textContent = `$${parseFloat(result.amount_usd).toFixed(2)}`;
-  document.getElementById('payCryptoAmount').textContent = `${result.pay_amount} ${result.pay_currency}`;
-  document.getElementById('payAddress').textContent = result.pay_address;
-  document.getElementById('payNetwork').textContent = result.network;
-  showStep('step2');
-  startTimer(3600);
-}
-
-async function confirmPayment() {
-  if (!currentPaymentId) return;
-  const btn = document.getElementById('confirmPayBtn');
-  btn.disabled = true; btn.textContent = 'Verifying...';
-  showStep('step3');
-  await new Promise(r => setTimeout(r, 1500));
-  document.getElementById('cs2').classList.add('done');
-  document.getElementById('cs2').textContent = '✓ Transaction confirmed';
-  document.getElementById('cs3').classList.add('active');
-  document.getElementById('cs3').textContent = '⟳ Creating booking...';
-  await new Promise(r => setTimeout(r, 1500));
-  const result = await api(`/api/bookings/payment-status/${currentPaymentId}/`, 'POST', {});
-  if (result && result.booking_created) {
-    document.getElementById('cs3').classList.add('done');
-    document.getElementById('cs3').textContent = '✓ Booking created';
-    await new Promise(r => setTimeout(r, 500));
-    document.getElementById('successDetail').innerHTML = `
-      <div style="margin-top:0.75rem;font-size:0.85rem;color:var(--text2);">
-        <div><strong style="color:var(--text);">${result.property}</strong></div>
-        <div>Booking #${result.booking_id}</div>
-        <div>Total paid: $${parseFloat(result.amount).toFixed(2)}</div>
-      </div>`;
-    if (timerInterval) clearInterval(timerInterval);
-    showStep('step4');
-  } else {
-    showStep('step2');
-    btn.disabled = false; btn.textContent = '✓ I\'ve sent the payment';
-    showToast(result?.error || 'Verification failed. Try again.', 'error');
-  }
-}
-
-function showStep(stepId) {
-  ['step1','step2','step3','step4'].forEach(s => {
-    const el = document.getElementById(s);
-    if (el) el.classList.add('hidden');
-  });
-  const target = document.getElementById(stepId);
-  if (target) target.classList.remove('hidden');
-}
-
-function resetToStep1() {
-  if (timerInterval) clearInterval(timerInterval);
-  currentPaymentId = null;
-  showStep('step1');
-}
-
-function copyPayAddress() {
-  navigator.clipboard.writeText(document.getElementById('payAddress').textContent.trim());
-  showToast('Address copied!', 'success');
-}
-
-function startTimer(seconds) {
-  if (timerInterval) clearInterval(timerInterval);
-  let remaining = seconds;
-  const el = document.getElementById('payTimer');
-  timerInterval = setInterval(() => {
-    remaining--;
-    const m = Math.floor(remaining/60).toString().padStart(2,'0');
-    const s = (remaining%60).toString().padStart(2,'0');
-    if (el) el.textContent = `⏳ Expires in ${m}:${s}`;
-    if (remaining <= 0) { clearInterval(timerInterval); if (el) el.textContent = '⌛ Payment expired'; resetToStep1(); }
-  }, 1000);
-}
+// ── LIGHTBOX ──────────────────────────────────────────────────
+function openLightbox(i){lbIndex=i;const lb=document.getElementById('lightbox');document.getElementById('lightboxImg').src=lbImages[i];lb.classList.remove('hidden');document.body.style.overflow='hidden';}
+function closeLightbox(){document.getElementById('lightbox').classList.add('hidden');document.body.style.overflow='';}
+function lbNav(d,e){e.stopPropagation();lbIndex=(lbIndex+d+lbImages.length)%lbImages.length;document.getElementById('lightboxImg').src=lbImages[lbIndex];}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();if(e.key==='ArrowLeft')lbNav(-1,{stopPropagation:()=>{}});if(e.key==='ArrowRight')lbNav(1,{stopPropagation:()=>{}});});
 
 loadProperty();
 </script>
-
 <style>
-.carbon-box { background:linear-gradient(135deg,rgba(46,204,113,0.06),rgba(0,0,0,0)); border:1px solid rgba(46,204,113,0.2); border-radius:var(--r2); padding:1.2rem; margin:1.5rem 0; }
-.carbon-title { font-size:0.88rem; font-weight:600; margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center; }
-.carbon-rating { font-size:0.78rem; font-weight:700; }
-.carbon-metrics { display:flex; gap:0; }
-.carbon-metric { flex:1; text-align:center; padding:0.5rem; border-right:1px solid rgba(46,204,113,0.15); }
-.carbon-metric:last-child { border-right:none; }
-.cm-icon { font-size:1.2rem; }
-.cm-val { font-size:1rem; font-weight:700; color:#2ecc71; margin:2px 0; }
-.cm-label { font-size:0.68rem; color:var(--text2); text-transform:uppercase; letter-spacing:0.05em; }
-
-.reviews-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; }
-.review-form-card { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:1.2rem; margin-bottom:1.2rem; }
-.review-form-card h4 { font-size:0.9rem; margin-bottom:0.75rem; }
-.star-picker { display:flex; gap:6px; }
-.star-pick { font-size:1.6rem; cursor:pointer; color:var(--text2); transition:all 0.15s; }
-.star-pick:hover { transform:scale(1.2); }
-.review-upload-area { border:1px dashed var(--border); border-radius:8px; padding:10px; text-align:center; cursor:pointer; font-size:0.8rem; color:var(--text2); transition:border-color 0.2s; }
-.review-upload-area:hover { border-color:var(--gold); }
-.review-img-previews { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
-.review-preview-img { width:70px; height:70px; object-fit:cover; border-radius:8px; border:1px solid var(--border); }
-.review-images { display:flex; gap:8px; flex-wrap:wrap; margin-top:0.75rem; }
-.review-img-thumb { width:80px; height:80px; object-fit:cover; border-radius:8px; cursor:pointer; border:1px solid var(--border); transition:transform 0.2s; }
-.review-img-thumb:hover { transform:scale(1.05); }
-
-.pay-step-header { display:flex; align-items:center; gap:12px; margin-bottom:1.2rem; padding-bottom:1rem; border-bottom:1px solid var(--border); }
-.pay-step-icon { width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--gold)); display:flex; align-items:center; justify-content:center; font-size:1.2rem; flex-shrink:0; }
-.pay-step-title { font-weight:700; font-size:0.95rem; }
-.pay-step-sub { font-size:0.78rem; color:var(--text2); margin-top:2px; }
-.pay-info-row { display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border); font-size:0.84rem; }
-.pay-label { color:var(--text2); }
-.pay-val { font-weight:600; }
-.pay-val.gold { color:var(--gold); }
-.pay-address-label { font-size:0.75rem; color:var(--text2); margin:10px 0 4px; }
-.pay-address-box { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-family:monospace; font-size:0.72rem; word-break:break-all; color:var(--text2); cursor:pointer; }
-.pay-copy-btn { width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text2); padding:7px; border-radius:8px; font-size:0.78rem; cursor:pointer; margin-top:4px; font-family:'DM Sans',sans-serif; transition:all 0.2s; }
-.pay-copy-btn:hover { border-color:var(--gold); color:var(--gold); }
-.pay-timer { text-align:center; font-size:0.8rem; color:var(--text2); margin:10px 0; }
-.pay-steps { display:flex; flex-direction:column; gap:6px; margin:12px 0; }
-.pay-step-item { font-size:0.78rem; color:var(--text2); padding:5px 8px; border-radius:6px; transition:all 0.3s; }
-.pay-step-item.done { color:var(--green); }
-.confirming-box { text-align:center; padding:1.5rem 0; }
-.confirming-spinner { width:48px; height:48px; border:3px solid var(--border); border-top-color:var(--gold); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 1rem; }
-@keyframes spin { to { transform:rotate(360deg); } }
-.confirming-title { font-size:1.1rem; font-weight:700; margin-bottom:4px; }
-.confirming-sub { font-size:0.82rem; color:var(--text2); margin-bottom:1.2rem; }
-.confirming-steps { display:flex; flex-direction:column; gap:8px; text-align:left; }
-.cs-row { font-size:0.82rem; color:var(--text2); padding:6px 10px; border-radius:6px; transition:all 0.4s; }
-.cs-row.done { color:var(--green); }
-.cs-row.active { color:var(--gold); }
-.success-box { text-align:center; padding:1.5rem 0; }
-.success-icon { width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,#1a6b3c,#2ecc71); display:flex; align-items:center; justify-content:center; font-size:1.6rem; color:white; margin:0 auto 1rem; }
-.success-title { font-size:1.2rem; font-weight:700; margin-bottom:6px; }
-.success-sub { font-size:0.84rem; color:var(--text2); line-height:1.5; }
+.prop-gallery{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:2rem;border-radius:16px;overflow:hidden;height:400px;}
+.gallery-main{cursor:pointer;overflow:hidden;grid-row:1/3;}
+.gallery-main img,.gallery-thumb img{width:100%;height:100%;object-fit:cover;transition:transform .3s;}
+.gallery-main:hover img,.gallery-thumb:hover img{transform:scale(1.04);}
+.no-img-lg{background:var(--surface2);width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:4rem;}
+.gallery-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.gallery-thumb{cursor:pointer;overflow:hidden;position:relative;}
+.more-overlay{position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:700;}
+.prop-layout{display:grid;grid-template-columns:1fr 340px;gap:2.5rem;align-items:start;}
+.prop-right{position:sticky;top:84px;}
+.prop-header-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;}
+.prop-type-badge{display:inline-block;background:var(--gold);color:black;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:3px 10px;border-radius:20px;margin-bottom:8px;}
+.prop-title{font-size:1.75rem;margin-bottom:8px;font-family:'Playfair Display',serif;}
+.prop-meta-row{display:flex;gap:1rem;flex-wrap:wrap;font-size:.82rem;color:var(--text2);}
+.heart-btn{background:none;border:1px solid var(--border);border-radius:50%;width:42px;height:42px;font-size:1.2rem;cursor:pointer;transition:all .2s;flex-shrink:0;}
+.heart-btn:hover,.heart-btn.wishlisted{border-color:var(--gold);transform:scale(1.1);}
+.prop-specs-row{display:flex;gap:1.5rem;flex-wrap:wrap;padding:1rem 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-bottom:1.5rem;font-size:.88rem;}
+.prop-section{margin-bottom:1.8rem;}
+.prop-section h3{font-size:.76rem;text-transform:uppercase;letter-spacing:.06em;color:var(--gold);margin-bottom:.9rem;}
+.amenities-wrap{display:flex;flex-wrap:wrap;gap:8px;}
+.amenity-chip{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:.82rem;}
+.carbon-box{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:1rem;}
+.carbon-rating{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem;}
+.carbon-low{color:#2ecc71;}.carbon-medium{color:#f59e0b;}.carbon-high{color:#e74c3c;}
+.carbon-stats{display:flex;gap:1.5rem;}
+.carbon-stat{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.76rem;color:var(--text2);}
+.carbon-stat strong{font-size:.95rem;color:var(--text);}
+.cal-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;}
+.cal-nav button{background:none;border:1px solid var(--border);color:var(--text);border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:1rem;}
+.cal-nav span{font-weight:600;font-size:.9rem;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+.cal-hd{text-align:center;font-size:.65rem;color:var(--text2);padding:4px 0;text-transform:uppercase;}
+.cal-d{text-align:center;padding:5px 2px;border-radius:6px;font-size:.8rem;}
+.cal-avail{color:var(--text2);}
+.cal-blocked{background:rgba(231,76,60,.15);color:#e74c3c;text-decoration:line-through;}
+.cal-past{opacity:.3;}
+.cal-leg{display:flex;gap:1rem;margin-top:.75rem;font-size:.73rem;color:var(--text2);}
+.cldot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:4px;}
+.booking-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1.4rem;box-shadow:0 8px 32px rgba(0,0,0,.3);}
+.booking-price{font-size:1.75rem;font-weight:700;margin-bottom:1rem;}
+.booking-price-night{font-size:.85rem;color:var(--text2);font-weight:400;}
+.date-inputs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.9rem;}
+.date-inp-group label{display:block;font-size:.62rem;color:var(--text2);text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px;}
+.date-inp-group input{width:100%;font-size:.83rem;}
+.guests-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;}
+.guests-counter{display:flex;align-items:center;gap:10px;}
+.guests-counter button{background:var(--surface2);border:1px solid var(--border);color:var(--text);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:1rem;}
+.b-line{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:5px;}
+.crypto-pills-row{display:flex;flex-wrap:wrap;gap:5px;}
+.cpill{background:var(--surface2);border:1px solid var(--border);color:var(--text2);border-radius:20px;padding:3px 9px;font-size:.7rem;font-weight:700;cursor:pointer;transition:all .15s;}
+.cpill.active{background:var(--gold);color:black;border-color:var(--gold);}
+.review-item{padding:.9rem 0;border-bottom:1px solid rgba(255,255,255,.05);}
+.review-item:last-child{border-bottom:none;}
+.review-header{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.rev-av{width:34px;height:34px;border-radius:50%;background:var(--gold);color:black;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0;}
+.rev-name{font-size:.86rem;font-weight:600;}
+.rev-date{font-size:.73rem;color:var(--text2);}
+.pstep{display:none;gap:12px;padding:.8rem 0;}
+.pstep.active{display:flex;align-items:flex-start;}
+.pstep-num{width:26px;height:26px;border-radius:50%;background:var(--gold);color:black;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;flex-shrink:0;margin-top:2px;}
+.pstep.done .pstep-num{background:#2ecc71;}
+.pstep-title{font-weight:700;margin-bottom:5px;}
+.pay-addr-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}
+.pay-addr-box code{font-size:.68rem;word-break:break-all;flex:1;}
+.copy-btn{background:var(--gold);color:black;border:none;border-radius:6px;padding:3px 9px;font-size:.7rem;font-weight:700;cursor:pointer;white-space:nowrap;}
+.pay-loader{display:flex;gap:6px;justify-content:center;margin-top:.9rem;}
+.pay-loader div{width:8px;height:8px;border-radius:50%;background:var(--gold);animation:pb 1.4s infinite ease-in-out;}
+.pay-loader div:nth-child(2){animation-delay:.2s;}
+.pay-loader div:nth-child(3){animation-delay:.4s;}
+@keyframes pb{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;display:flex;align-items:center;justify-content:center;}
+.lightbox img{max-width:90vw;max-height:90vh;border-radius:8px;object-fit:contain;}
+.lb-close{position:fixed;top:20px;right:24px;background:rgba(255,255,255,.15);border:none;color:white;font-size:1.1rem;width:36px;height:36px;border-radius:50%;cursor:pointer;}
+.lb-prev,.lb-next{position:fixed;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.12);border:none;color:white;font-size:2rem;width:46px;height:46px;border-radius:50%;cursor:pointer;}
+.lb-prev{left:14px;}.lb-next{right:14px;}
+@media(max-width:900px){.prop-layout{grid-template-columns:1fr;}.prop-right{position:static;}.prop-gallery{height:280px;}}
+@media(max-width:600px){.prop-gallery{grid-template-columns:1fr;height:220px;}.gallery-grid{display:none;}}
 </style>
 {% endblock %}

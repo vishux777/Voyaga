@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/bookings/', include('apps.bookings.urls')),
     path('api/payments/', include('apps.payments.urls')),
 
+    # Pages
     path('', T(template_name='index.html'), name='home'),
     path('properties', T(template_name='properties.html'), name='properties'),
     path('property/<int:pk>', T(template_name='property_detail.html'), name='property_detail'),
@@ -22,4 +23,6 @@ urlpatterns = [
     path('profile', T(template_name='profile.html'), name='profile'),
     path('my-listings', T(template_name='my_listings.html'), name='my_listings'),
     path('list-property', T(template_name='list_property.html'), name='list_property'),
+    path('wishlist', T(template_name='wishlist.html'), name='wishlist'),
+    path('analytics', T(template_name='analytics.html'), name='analytics'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

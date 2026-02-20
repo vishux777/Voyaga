@@ -17,6 +17,7 @@ class User(AbstractUser):
     bio = models.TextField(blank=True)
     phone = models.CharField(max_length=20, blank=True)
     wallet_balance = models.DecimalField(max_digits=10, decimal_places=2, default=500.00)
+    loyalty_points = models.IntegerField(default=0)
     is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -25,6 +26,22 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.email
+
+    @property
+    def loyalty_tier(self):
+        if self.loyalty_points >= 5000:
+            return 'Platinum'
+        elif self.loyalty_points >= 2000:
+            return 'Gold'
+        elif self.loyalty_points >= 500:
+            return 'Silver'
+        return 'Explorer'
+
+    @property
+    def loyalty_discount(self):
+        """Percentage discount based on tier"""
+        tiers = {'Platinum': 10, 'Gold': 7, 'Silver': 5, 'Explorer': 0}
+        return tiers.get(self.loyalty_tier, 0)
 
 
 class OTPCode(models.Model):
@@ -63,11 +80,10 @@ class Notification(models.Model):
         ('cancellation', 'Cancellation'),
         ('review', 'Review'),
         ('system', 'System'),
+        ('payout', 'Payout'),
     ]
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='notifications'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications'
     )
     title = models.CharField(max_length=200)
     message = models.TextField()

@@ -39,11 +39,15 @@ class LoginSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    loyalty_tier = serializers.ReadOnlyField()
+    loyalty_discount = serializers.ReadOnlyField()
+
     class Meta:
         model = User
         fields = ['id', 'email', 'username', 'first_name', 'last_name', 'role',
-                  'avatar', 'bio', 'phone', 'wallet_balance', 'is_verified', 'created_at']
-        read_only_fields = ['id', 'wallet_balance', 'is_verified', 'created_at']
+                  'avatar', 'bio', 'phone', 'wallet_balance', 'loyalty_points',
+                  'loyalty_tier', 'loyalty_discount', 'is_verified', 'created_at']
+        read_only_fields = ['id', 'wallet_balance', 'loyalty_points', 'is_verified', 'created_at']
 
 
 class ReviewSerializer(serializers.ModelSerializer):
@@ -72,17 +76,14 @@ class ReviewSerializer(serializers.ModelSerializer):
     def validate(self, data):
         booking = data.get('booking')
         request = self.context.get('request')
-
         if booking:
             if booking.guest != request.user:
                 raise serializers.ValidationError("You can only review your own bookings.")
             if booking.status != 'completed':
                 raise serializers.ValidationError("Can only review completed bookings.")
-
         prop = data.get('prop')
         if not prop and not booking:
             raise serializers.ValidationError("Either prop or booking must be provided.")
-
         return data
 
     def create(self, validated_data):

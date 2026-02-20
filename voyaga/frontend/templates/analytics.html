@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% block title %}Analytics — Voyaga{% endblock %}
+{% block content %}
+<div class="page-container">
+  <div class="page-header-row" style="margin-bottom:2rem;">
+    <div>
+      <h1 class="page-title">📊 Host Analytics</h1>
+      <p style="color:var(--text2);font-size:0.88rem;margin-top:4px;">Your earnings and performance overview</p>
+    </div>
+    <a href="/my-listings" class="btn-ghost">← My Listings</a>
+  </div>
+
+  <div id="analyticsContent">
+    <div class="skeleton-card" style="height:120px;"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+if (!getToken()) window.location.href = '/';
+
+async function loadAnalytics() {
+  const data = await api('/api/bookings/analytics/');
+  if (!data) return;
+
+  const el = document.getElementById('analyticsContent');
+
+  const tierColor = { Platinum: '#e5c46b', Gold: '#f59e0b', Silver: '#94a3b8', Explorer: '#8b5cf6' };
+
+  el.innerHTML = `
+    <!-- KPI Cards -->
+    <div class="analytics-kpi-grid">
+      <div class="kpi-card gold">
+        <div class="kpi-icon">💰</div>
+        <div class="kpi-value">$${data.total_earnings.toFixed(2)}</div>
+        <div class="kpi-label">Total Earnings</div>
+        <div class="kpi-sub">97% of all confirmed bookings</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">📅</div>
+        <div class="kpi-value">$${data.month_earnings.toFixed(2)}</div>
+        <div class="kpi-label">This Month</div>
+        <div class="kpi-sub">${data.month_bookings} booking${data.month_bookings !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">🏠</div>
+        <div class="kpi-value">${data.active_listings}<span style="font-size:1rem;color:var(--text2)">/${data.total_listings}</span></div>
+        <div class="kpi-label">Active Listings</div>
+        <div class="kpi-sub">${data.total_listings - data.active_listings} delisted</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">✅</div>
+        <div class="kpi-value">${data.total_bookings}</div>
+        <div class="kpi-label">Total Bookings</div>
+        <div class="kpi-sub">${data.avg_rating ? `★ ${data.avg_rating} avg rating` : 'No reviews yet'}</div>
+      </div>
+    </div>
+
+    <!-- Earnings Chart -->
+    <div class="analytics-chart-card">
+      <h3>Earnings — Last 6 Months</h3>
+      <div style="position:relative;height:240px;">
+        <canvas id="earningsChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Per-property breakdown -->
+    <div class="analytics-section">
+      <h3>Property Performance</h3>
+      ${data.properties.length === 0
+        ? '<div style="color:var(--text2);text-align:center;padding:2rem;">No properties yet. <a href="/list-property" style="color:var(--gold);">List your first →</a></div>'
+        : data.properties.map(p => `
+          <div class="prop-perf-row">
+            <div class="prop-perf-info">
+              <div class="prop-perf-title">${p.title}</div>
+              <div class="prop-perf-loc">📍 ${p.city} · <span class="status-dot ${p.is_active ? 'active' : 'inactive'}">${p.is_active ? '● Live' : '○ Delisted'}</span></div>
+            </div>
+            <div class="prop-perf-stats">
+              <div class="prop-stat"><span class="prop-stat-val">$${p.earnings.toFixed(0)}</span><span class="prop-stat-lbl">earned</span></div>
+              <div class="prop-stat"><span class="prop-stat-val">${p.bookings}</span><span class="prop-stat-lbl">bookings</span></div>
+              <div class="prop-stat"><span class="prop-stat-val">${p.avg_rating || '—'}</span><span class="prop-stat-lbl">rating</span></div>
+            </div>
+            <a href="/property/${p.id}" class="btn-sm">View</a>
+          </div>`).join('')}
+    </div>`;
+
+  // Draw chart
+  const ctx = document.getElementById('earningsChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.monthly.map(m => m.month),
+      datasets: [
+        {
+          label: 'Earnings ($)',
+          data: data.monthly.map(m => m.earnings),
+          backgroundColor: 'rgba(201,168,76,0.7)',
+          borderColor: '#c9a84c',
+          borderWidth: 1,
+          borderRadius: 6,
+        },
+        {
+          label: 'Bookings',
+          data: data.monthly.map(m => m.bookings),
+          type: 'line',
+          borderColor: '#8b5cf6',
+          backgroundColor: 'rgba(139,92,246,0.1)',
+          borderWidth: 2,
+          pointBackgroundColor: '#8b5cf6',
+          yAxisID: 'y2',
+          tension: 0.4,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#aaa', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#888' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: '#888', callback: v => '$' + v }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y2: { position: 'right', ticks: { color: '#888' }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+loadAnalytics();
+</script>
+
+<style>
+.analytics-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
+.kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r2); padding:1.4rem; transition:all 0.2s; }
+.kpi-card:hover { border-color:var(--gold); transform:translateY(-2px); }
+.kpi-card.gold { border-color:rgba(201,168,76,0.4); background:linear-gradient(135deg,rgba(201,168,76,0.08),var(--surface)); }
+.kpi-icon { font-size:1.5rem; margin-bottom:0.5rem; }
+.kpi-value { font-size:1.8rem; font-weight:700; margin-bottom:4px; }
+.kpi-label { font-size:0.8rem; color:var(--text2); text-transform:uppercase; letter-spacing:0.05em; }
+.kpi-sub { font-size:0.75rem; color:var(--text2); margin-top:4px; }
+.analytics-chart-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r2); padding:1.5rem; margin-bottom:1.5rem; }
+.analytics-chart-card h3, .analytics-section h3 { font-size:0.78rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--gold); margin-bottom:1.2rem; }
+.analytics-section { background:var(--surface); border:1px solid var(--border); border-radius:var(--r2); padding:1.5rem; }
+.prop-perf-row { display:flex; align-items:center; gap:1rem; padding:0.9rem 0; border-bottom:1px solid rgba(255,255,255,0.05); }
+.prop-perf-row:last-child { border-bottom:none; }
+.prop-perf-info { flex:1; }
+.prop-perf-title { font-size:0.9rem; font-weight:600; margin-bottom:3px; }
+.prop-perf-loc { font-size:0.75rem; color:var(--text2); }
+.prop-perf-stats { display:flex; gap:1.5rem; }
+.prop-stat { text-align:center; }
+.prop-stat-val { display:block; font-size:1rem; font-weight:700; }
+.prop-stat-lbl { display:block; font-size:0.68rem; color:var(--text2); text-transform:uppercase; }
+.status-dot.active { color:#2ecc71; }
+.status-dot.inactive { color:#e74c3c; }
+@media(max-width:768px) { .analytics-kpi-grid { grid-template-columns:repeat(2,1fr); } }
+@media(max-width:480px) { .analytics-kpi-grid { grid-template-columns:1fr 1fr; } .prop-perf-stats { display:none; } }
+</style>
+{% endblock %}
