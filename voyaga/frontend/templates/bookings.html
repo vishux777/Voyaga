@@ -42,16 +42,17 @@ function renderBookings(bookings) {
   }
   container.innerHTML = bookings.map(b => {
     const prop = b.property_detail || {};
+    const propId = b.property || b.listing || prop.id;
     const canCancel = ['pending', 'confirmed'].includes(b.status);
     const canReview = b.status === 'completed';
     return `
     <div class="booking-detail-card status-${b.status}">
-      <div class="booking-card-img">
+      <div class="booking-card-img" onclick="window.location.href='/property/${propId}'" style="cursor:pointer;">
         ${prop.primary_image_url ? `<img src="${prop.primary_image_url}" alt="${prop.title}">` : '<div class="no-img">🏠</div>'}
       </div>
       <div class="booking-card-info">
         <div class="booking-card-header">
-          <h3 onclick="window.location.href='/property/${b.property}'">${prop.title || 'Property'}</h3>
+          <h3 onclick="window.location.href='/property/${propId}'" style="cursor:pointer;">${prop.title || 'Property'}</h3>
           <span class="status-badge ${b.status}">${b.status}</span>
         </div>
         <p class="booking-location">📍 ${prop.city || ''}, ${prop.country || ''}</p>
@@ -63,10 +64,10 @@ function renderBookings(bookings) {
           <div class="date-chip"><div class="chip-label">Guests</div><div class="chip-val">${b.guests_count}</div></div>
         </div>
         <div class="booking-footer">
-          <div class="booking-total">Total: <strong>$${b.total_price}</strong></div>
+          <div class="booking-total">Total: <strong>$${parseFloat(b.total_price).toFixed(2)}</strong></div>
           <div class="booking-actions">
             ${canCancel ? `<button class="btn-danger-sm" onclick="cancelBooking(${b.id})">Cancel</button>` : ''}
-            ${canReview ? `<button class="btn-outline-sm" onclick="showReviewForm(${b.id}, ${b.property})">Write Review</button>` : ''}
+            ${canReview ? `<button class="btn-outline-sm" onclick="showReviewForm(${b.id}, ${propId})">Write Review</button>` : ''}
           </div>
         </div>
       </div>
@@ -84,61 +85,113 @@ async function cancelBooking(id) {
   if (!confirm('Cancel this booking? You will receive a full refund.')) return;
   const result = await api(`/api/bookings/${id}/cancel/`, 'POST', {});
   if (result) {
-    showToast(result.message, 'success');
-    await refreshWallet();
+    showToast(result.message || 'Booking cancelled', 'success');
     loadBookings();
   }
 }
 
 function showReviewForm(bookingId, propId) {
+  // Remove existing modal if any
+  const existing = document.getElementById('reviewModal');
+  if (existing) existing.remove();
+
   const modal = `
   <div class="modal-overlay" id="reviewModal" onclick="if(event.target===this)this.remove()">
     <div class="modal">
       <button class="modal-close" onclick="document.getElementById('reviewModal').remove()">✕</button>
       <div class="modal-header">
+        <div class="modal-logo">⭐</div>
         <h2>Write a Review</h2>
-        <p>Share your experience</p>
+        <p>Share your experience with future travellers</p>
       </div>
-      <form onsubmit="submitReview(event, ${bookingId}, ${propId})">
-        <div class="form-group">
-          <label>Rating</label>
-          <div class="star-selector" id="starSelector">
-            ${[1,2,3,4,5].map(n => `<span class="star-opt" data-val="${n}" onclick="selectStar(${n})">★</span>`).join('')}
-          </div>
-          <input type="hidden" id="reviewRating" value="0">
+      <div class="form-group">
+        <label>Your Rating</label>
+        <div class="star-selector" id="starSelector">
+          ${[1,2,3,4,5].map(n => `<span class="star-opt" data-val="${n}" onclick="selectStar(${n})">★</span>`).join('')}
         </div>
-        <div class="form-group">
-          <label>Your review</label>
-          <textarea id="reviewComment" rows="4" placeholder="Tell others about your stay..." required minlength="20"></textarea>
+        <input type="hidden" id="reviewRating" value="0">
+      </div>
+      <div class="form-group">
+        <label>Your Review</label>
+        <textarea id="reviewComment" rows="4" placeholder="Tell others about your stay — what made it special?" style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.88rem;outline:none;resize:vertical;box-sizing:border-box;"></textarea>
+      </div>
+      <div class="form-group">
+        <label style="font-size:0.78rem;color:var(--text2);">📸 Add photos (optional)</label>
+        <div style="border:1px dashed var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer;font-size:0.8rem;color:var(--text2);" onclick="document.getElementById('modalReviewImages').click()">
+          Click to upload photos
+          <input type="file" id="modalReviewImages" multiple accept="image/*" style="display:none" onchange="previewModalImages(this)">
         </div>
-        <button type="submit" class="btn-primary w-full">Submit Review</button>
-      </form>
+        <div id="modalImagePreviews" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
+      </div>
+      <div id="reviewModalError" style="color:#e74c3c;font-size:0.82rem;display:none;margin-bottom:0.5rem;"></div>
+      <button class="btn-primary w-full" id="submitReviewModalBtn" onclick="submitReview(${bookingId}, ${propId})">
+        Post Review
+      </button>
     </div>
   </div>`;
+
   document.body.insertAdjacentHTML('beforeend', modal);
+}
+
+function previewModalImages(input) {
+  const container = document.getElementById('modalImagePreviews');
+  container.innerHTML = '';
+  Array.from(input.files).slice(0, 4).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      img.style.cssText = 'width:70px;height:70px;object-fit:cover;border-radius:8px;border:1px solid var(--border);';
+      container.appendChild(img);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function selectStar(n) {
   document.getElementById('reviewRating').value = n;
   document.querySelectorAll('.star-opt').forEach((s, i) => {
     s.classList.toggle('active', i < n);
+    s.style.color = i < n ? 'var(--gold)' : 'var(--text2)';
   });
 }
 
-async function submitReview(e, bookingId, propId) {
-  e.preventDefault();
+async function submitReview(bookingId, propId) {
   const rating = parseInt(document.getElementById('reviewRating').value);
-  const comment = document.getElementById('reviewComment').value;
-  if (!rating) { showToast('Please select a rating', 'error'); return; }
+  const comment = document.getElementById('reviewComment').value.trim();
+  const errEl = document.getElementById('reviewModalError');
+
+  if (!rating) { errEl.textContent = 'Please select a rating'; errEl.style.display = 'block'; return; }
+  if (!comment) { errEl.textContent = 'Please write a review'; errEl.style.display = 'block'; return; }
+  errEl.style.display = 'none';
+
+  const btn = document.getElementById('submitReviewModalBtn');
+  btn.disabled = true; btn.textContent = 'Posting...';
+
   const result = await api('/api/auth/reviews/', 'POST', {
-    booking: bookingId, property: propId, rating, comment
+    booking: bookingId,
+    prop: propId,
+    rating,
+    comment
   });
+
+  btn.disabled = false; btn.textContent = 'Post Review';
+
   if (result) {
     document.getElementById('reviewModal').remove();
-    showToast('Review submitted!', 'success');
+    showToast('Review posted! Thank you 🌟', 'success');
+    loadBookings();
   }
 }
 
 loadBookings();
 </script>
+
+<style>
+.star-selector { display:flex; gap:8px; margin-top:6px; }
+.star-opt { font-size:2rem; cursor:pointer; color:var(--text2); transition:all 0.15s; user-select:none; }
+.star-opt:hover { transform:scale(1.2); color:var(--gold); }
+.star-opt.active { color:var(--gold); }
+</style>
+
 {% endblock %}

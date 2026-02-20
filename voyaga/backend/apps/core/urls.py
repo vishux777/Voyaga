@@ -10,4 +10,6 @@ urlpatterns = [
     path('profile/', views.ProfileView.as_view()),
     path('reviews/', views.ReviewListCreateView.as_view()),
     path('chat/', views.AIChatView.as_view()),
+    path('notifications/', views.NotificationListView.as_view()),
+    path('notifications/<int:pk>/read/', views.NotificationReadView.as_view()),
 ]

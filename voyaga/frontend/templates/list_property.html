@@ -8,8 +8,10 @@
     <div class="list-header">
       <div class="section-badge">✦ Become a Host</div>
       <h1 class="list-title">List your property</h1>
-      <p class="list-sub">Share your space with travelers from around the world and start earning.</p>
+      <p class="list-sub">Share your space with travellers from around the world and start earning crypto.</p>
     </div>
+
+    <div id="listMsg" class="hidden" style="margin-bottom:1rem;"></div>
 
     <form id="listForm" onsubmit="submitListing(event)">
 
@@ -97,23 +99,23 @@
 
       <div class="list-section">
         <h3>Photos</h3>
-        <p class="tab-desc">Upload photos of your property (JPG, PNG — max 5MB each)</p>
-        <div class="upload-area" id="uploadArea" onclick="document.getElementById('lpImages').click()">
+        <p class="tab-desc" style="font-size:0.82rem;color:var(--text2);margin-bottom:0.75rem;">Upload up to 10 photos. The first photo will be the cover image.</p>
+        <div class="upload-area" id="uploadArea" onclick="document.getElementById('lpImages').click()"
+             ondrop="handleDrop(event)" ondragover="event.preventDefault()" ondragenter="uploadAreaHover(true)" ondragleave="uploadAreaHover(false)">
           <div class="upload-icon">📸</div>
-          <div class="upload-text">Click to upload photos</div>
-          <div class="upload-sub">or drag and drop</div>
-          <input type="file" id="lpImages" multiple accept="image/*" style="display:none" onchange="previewImages(this)">
+          <div class="upload-text">Click to upload or drag & drop</div>
+          <div class="upload-sub">JPG, PNG — up to 10 photos, max 5MB each</div>
+          <input type="file" id="lpImages" multiple accept="image/*" style="display:none" onchange="handleImageSelect(this.files)">
         </div>
         <div class="image-previews" id="imagePreviews"></div>
+        <p id="imageCount" style="font-size:0.75rem;color:var(--text2);margin-top:4px;"></p>
       </div>
-
-      <div id="listMsg" class="hidden" style="margin-bottom:1rem;"></div>
 
       <button type="submit" class="btn-primary w-full" id="listBtn" style="font-size:1rem;padding:14px;">
         ✦ Publish Listing
       </button>
-    </form>
 
+    </form>
   </div>
 </div>
 
@@ -123,19 +125,22 @@
 .list-title { font-size: 2.2rem; margin: 0.5rem 0; }
 .list-sub { color: var(--text2); font-size: 0.95rem; }
 .list-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); padding: 1.5rem; margin-bottom: 1.2rem; }
-.list-section h3 { font-size: 0.95rem; margin-bottom: 1.2rem; color: var(--gold); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.78rem; }
+.list-section h3 { font-size: 0.78rem; margin-bottom: 1.2rem; color: var(--gold); text-transform: uppercase; letter-spacing: 0.06em; }
 .amenity-checks { display: flex; flex-wrap: wrap; gap: 10px; }
 .amenity-check { display: flex; align-items: center; gap: 7px; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 7px 14px; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; user-select: none; }
 .amenity-check:hover { border-color: var(--gold); }
 .amenity-check input { accent-color: var(--gold); width: 14px; height: 14px; }
-.amenity-check:has(input:checked) { border-color: var(--gold); color: var(--gold); background: var(--gold-glow); }
+.amenity-check:has(input:checked) { border-color: var(--gold); color: var(--gold); background: rgba(201,168,76,0.08); }
 .upload-area { border: 2px dashed var(--border); border-radius: var(--r2); padding: 2.5rem; text-align: center; cursor: pointer; transition: all 0.2s; }
-.upload-area:hover { border-color: var(--gold); }
+.upload-area:hover, .upload-area.hover { border-color: var(--gold); background: rgba(201,168,76,0.04); }
 .upload-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
 .upload-text { font-size: 0.95rem; margin-bottom: 4px; }
 .upload-sub { font-size: 0.8rem; color: var(--text2); }
 .image-previews { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 1rem; }
-.img-preview { width: 90px; height: 90px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); }
+.img-preview-wrap { position: relative; width: 90px; height: 90px; }
+.img-preview-wrap img { width: 90px; height: 90px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); }
+.img-preview-wrap .remove-img { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; background: #e74c3c; border-radius: 50%; color: white; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; line-height: 1; }
+.img-preview-wrap .primary-badge { position: absolute; bottom: 4px; left: 4px; background: var(--gold); color: black; font-size: 0.55rem; font-weight: 700; padding: 2px 5px; border-radius: 4px; }
 </style>
 
 {% endblock %}
@@ -143,20 +148,54 @@
 <script>
 if (!getToken()) window.location.href = '/';
 
-function previewImages(input) {
+let selectedFiles = [];
+
+function uploadAreaHover(on) {
+  document.getElementById('uploadArea').classList.toggle('hover', on);
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  uploadAreaHover(false);
+  handleImageSelect(e.dataTransfer.files);
+}
+
+function handleImageSelect(files) {
+  const newFiles = Array.from(files);
+  const remaining = 10 - selectedFiles.length;
+  const toAdd = newFiles.slice(0, remaining);
+  selectedFiles = [...selectedFiles, ...toAdd];
+  renderPreviews();
+}
+
+function removeImage(index) {
+  selectedFiles.splice(index, 1);
+  renderPreviews();
+}
+
+function renderPreviews() {
   const container = document.getElementById('imagePreviews');
+  const countEl = document.getElementById('imageCount');
   container.innerHTML = '';
-  Array.from(input.files).forEach(file => {
+
+  selectedFiles.forEach((file, i) => {
     const reader = new FileReader();
     reader.onload = e => {
-      const img = document.createElement('img');
-      img.src = e.target.result;
-      img.className = 'img-preview';
-      container.appendChild(img);
+      const wrap = document.createElement('div');
+      wrap.className = 'img-preview-wrap';
+      wrap.innerHTML = `
+        <img src="${e.target.result}" alt="preview">
+        ${i === 0 ? '<span class="primary-badge">COVER</span>' : ''}
+        <button class="remove-img" onclick="removeImage(${i})" type="button">✕</button>`;
+      container.appendChild(wrap);
     };
     reader.readAsDataURL(file);
   });
-  document.getElementById('uploadArea').style.borderColor = 'var(--gold)';
+
+  countEl.textContent = selectedFiles.length > 0 ? `${selectedFiles.length} photo${selectedFiles.length > 1 ? 's' : ''} selected` : '';
+  if (selectedFiles.length > 0) {
+    document.getElementById('uploadArea').style.borderColor = 'var(--gold)';
+  }
 }
 
 async function submitListing(e) {
@@ -170,51 +209,65 @@ async function submitListing(e) {
   btn.disabled = true;
   btn.textContent = 'Publishing...';
 
-  const token = getToken();
+  // Step 1: Create the property (JSON)
   const payload = {
-    title:          document.getElementById('lpTitle').value,
-    property_type:  document.getElementById('lpType').value,
+    title:           document.getElementById('lpTitle').value,
+    property_type:   document.getElementById('lpType').value,
     price_per_night: parseFloat(document.getElementById('lpPrice').value),
-    description:    document.getElementById('lpDesc').value,
-    city:           document.getElementById('lpCity').value,
-    country:        document.getElementById('lpCountry').value,
-    address:        document.getElementById('lpAddress').value,
-    max_guests:     parseInt(document.getElementById('lpGuests').value),
-    bedrooms:       parseInt(document.getElementById('lpBedrooms').value),
-    bathrooms:      parseInt(document.getElementById('lpBathrooms').value),
-    amenities:      amenities,
+    description:     document.getElementById('lpDesc').value,
+    city:            document.getElementById('lpCity').value,
+    country:         document.getElementById('lpCountry').value,
+    address:         document.getElementById('lpAddress').value,
+    max_guests:      parseInt(document.getElementById('lpGuests').value),
+    bedrooms:        parseInt(document.getElementById('lpBedrooms').value),
+    bathrooms:       parseInt(document.getElementById('lpBathrooms').value),
+    amenities:       amenities,
   };
 
   const result = await api('/api/properties/create/', 'POST', payload);
 
-  if (!result || result.id === undefined) {
+  if (!result || !result.id) {
     btn.disabled = false;
     btn.textContent = '✦ Publish Listing';
     return;
   }
 
-  // Upload images if any
-  const files = document.getElementById('lpImages').files;
-  if (files.length > 0 && result.id) {
-    const formData = new FormData();
-    Array.from(files).forEach(f => formData.append('images', f));
+  // Step 2: Upload images if any (multipart)
+  if (selectedFiles.length > 0) {
+    btn.textContent = `Uploading ${selectedFiles.length} photo${selectedFiles.length > 1 ? 's' : ''}...`;
 
-    await fetch(`/api/properties/${result.id}/images/`, {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token },
-      body: formData
-    });
+    const formData = new FormData();
+    selectedFiles.forEach(f => formData.append('images', f));
+
+    try {
+      const token = getToken();
+      const imgRes = await fetch(`/api/properties/${result.id}/images/`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token },
+        body: formData
+      });
+      if (!imgRes.ok) {
+        console.warn('Image upload failed:', await imgRes.text());
+        showToast('Property created but images failed to upload', 'error');
+      }
+    } catch (err) {
+      console.warn('Image upload error:', err);
+      showToast('Property created but images failed to upload', 'error');
+    }
   }
 
+  // Step 3: Success
   const msg = document.getElementById('listMsg');
   msg.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--green);border-radius:12px;padding:1rem;text-align:center;">
+    <div style="background:var(--surface);border:1px solid #2ecc71;border-radius:12px;padding:1.2rem;text-align:center;">
       <div style="font-size:1.5rem;margin-bottom:6px;">🎉</div>
       <div style="font-weight:700;margin-bottom:4px;">Property Listed Successfully!</div>
       <div style="color:var(--text2);font-size:0.85rem;margin-bottom:1rem;">Your property is now live on Voyaga.</div>
       <a href="/property/${result.id}" style="color:var(--gold);font-size:0.88rem;">View your listing →</a>
     </div>`;
   msg.classList.remove('hidden');
+  msg.scrollIntoView({ behavior: 'smooth' });
+
   btn.disabled = false;
   btn.textContent = '✦ Publish Listing';
 

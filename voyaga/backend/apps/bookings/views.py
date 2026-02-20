@@ -1,11 +1,10 @@
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.utils import timezone
 from .models import Booking
 from .serializers import BookingSerializer
-from apps.core.models import AuditLog
-import time
+from apps.core.models import AuditLog, Notification
 import random
 import string
 
@@ -86,11 +85,11 @@ class BookingInitiateView(APIView):
         from apps.payments.views import PendingCryptoPayment
         from datetime import date
 
-        listing_id = request.data.get('listing')
-        check_in   = request.data.get('check_in')
-        check_out  = request.data.get('check_out')
+        listing_id   = request.data.get('listing')
+        check_in     = request.data.get('check_in')
+        check_out    = request.data.get('check_out')
         guests_count = request.data.get('guests_count', 1)
-        currency   = str(request.data.get('currency', 'btc')).lower()
+        currency     = str(request.data.get('currency', 'btc')).lower()
 
         if not listing_id or not check_in or not check_out:
             return Response({
@@ -114,8 +113,8 @@ class BookingInitiateView(APIView):
         if Booking.has_conflict(prop, ci, co):
             return Response({'error': 'Selected dates are not available'}, status=400)
 
-        nights    = (co - ci).days
-        total     = float(prop.price_per_night) * nights
+        nights     = (co - ci).days
+        total      = float(prop.price_per_night) * nights
 
         rates = {
             'btc': 0.0000156, 'eth': 0.000285, 'usdt': 1.0,
@@ -125,7 +124,9 @@ class BookingInitiateView(APIView):
         rate        = rates.get(currency, 1.0)
         pay_amount  = round(total * rate, 8)
         pay_address = _make_address(currency)
-        payment_id  = 'pay_' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
+        payment_id  = 'pay_' + ''.join(
+            random.choices(string.ascii_lowercase + string.digits, k=16)
+        )
 
         PendingCryptoPayment.objects.create(
             user=request.user,
@@ -134,27 +135,27 @@ class BookingInitiateView(APIView):
             currency=currency,
             status='waiting',
             meta={
-                'listing_id': int(listing_id),
-                'check_in':   str(check_in),
-                'check_out':  str(check_out),
+                'listing_id':   int(listing_id),
+                'check_in':     str(check_in),
+                'check_out':    str(check_out),
                 'guests_count': int(guests_count),
-                'type': 'booking',
-                'pay_address': pay_address,
-                'pay_amount':  pay_amount,
+                'type':         'booking',
+                'pay_address':  pay_address,
+                'pay_amount':   pay_amount,
             }
         )
 
         return Response({
-            'payment_id':  payment_id,
-            'pay_address': pay_address,
-            'pay_amount':  pay_amount,
+            'payment_id':   payment_id,
+            'pay_address':  pay_address,
+            'pay_amount':   pay_amount,
             'pay_currency': currency.upper(),
-            'amount_usd':  total,
-            'nights':      nights,
-            'property':    prop.title,
-            'status':      'waiting',
-            'network':     _get_network(currency),
-            'expires_in':  3600,
+            'amount_usd':   total,
+            'nights':       nights,
+            'property':     prop.title,
+            'status':       'waiting',
+            'network':      _get_network(currency),
+            'expires_in':   3600,
         })
 
 
@@ -227,15 +228,35 @@ class BookingPaymentStatusView(APIView):
                 'amount':     pending.amount_usd
             })
 
+            # ── Notify the host ──────────────────────────
+            try:
+                guest_name = (
+                    request.user.get_full_name().strip() or request.user.username
+                )
+                Notification.objects.create(
+                    user=prop.host,
+                    title='New Booking! 🎉',
+                    message=(
+                        f'{guest_name} booked "{prop.title}" '
+                        f'from {ci} to {co} '
+                        f'({booking.guests_count} guest{"s" if booking.guests_count > 1 else ""}). '
+                        f'Total: ${float(pending.amount_usd):.2f}'
+                    ),
+                    notif_type='booking',
+                    link='/my-listings'
+                )
+            except Exception:
+                pass  # Never fail a booking because of notification error
+
             pending.status = 'finished'
             pending.save()
 
             return Response({
-                'status':         'finished',
+                'status':          'finished',
                 'booking_created': True,
-                'booking_id':     booking.id,
-                'property':       prop.title,
-                'amount':         pending.amount_usd
+                'booking_id':      booking.id,
+                'property':        prop.title,
+                'amount':          pending.amount_usd
             })
 
         except Exception as e:
@@ -294,6 +315,25 @@ class BookingCancelView(APIView):
             description=f"Refund for cancelled {booking.listing.title}",
             status='completed'
         )
+
+        # ── Notify the host about cancellation ──────────
+        try:
+            guest_name = user.get_full_name().strip() or user.username
+            Notification.objects.create(
+                user=booking.listing.host,
+                title='Booking Cancelled',
+                message=(
+                    f'{guest_name} cancelled their booking for '
+                    f'"{booking.listing.title}" '
+                    f'({booking.check_in} → {booking.check_out}). '
+                    f'Refund of ${float(booking.total_price):.2f} issued to guest.'
+                ),
+                notif_type='cancellation',
+                link='/my-listings'
+            )
+        except Exception:
+            pass
+
         AuditLog.log(user, 'booking_cancelled', {'booking_id': booking.id})
         return Response({'message': 'Booking cancelled and refunded to wallet successfully'})
 

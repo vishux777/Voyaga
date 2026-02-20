@@ -47,8 +47,13 @@ class Review(models.Model):
     prop = models.ForeignKey(
         'properties.Property', on_delete=models.CASCADE, related_name='reviews'
     )
+    # Nullable so reviews can be posted from property page without a booking
     booking = models.OneToOneField(
-        Booking, on_delete=models.CASCADE, related_name='review'
+        Booking,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='review'
     )
     rating = models.IntegerField(choices=[(i, i) for i in range(1, 6)])
     comment = models.TextField()

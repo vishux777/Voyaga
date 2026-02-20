@@ -11,6 +11,52 @@
 <script>
 const propId = window.location.pathname.split('/').filter(Boolean).pop();
 
+// Carbon footprint calculator
+function calcCarbon(prop, nights) {
+  const typeFactors = {
+    villa: { co2: 18, energy: 35, water: 280 },
+    apartment: { co2: 8, energy: 18, water: 180 },
+    house: { co2: 14, energy: 28, water: 230 },
+    cabin: { co2: 6, energy: 12, water: 120 },
+    studio: { co2: 5, energy: 14, water: 150 },
+    penthouse: { co2: 22, energy: 45, water: 320 },
+  };
+  const f = typeFactors[prop.property_type?.toLowerCase()] || { co2: 10, energy: 20, water: 200 };
+  const amenityBonus = (prop.amenities || []).includes('pool') ? 1.4 : 1;
+  return {
+    co2: Math.round(f.co2 * nights * amenityBonus),
+    energy: Math.round(f.energy * nights),
+    water: Math.round(f.water * nights),
+    rating: f.co2 < 8 ? 'Low' : f.co2 < 16 ? 'Medium' : 'High',
+    color: f.co2 < 8 ? '#2ecc71' : f.co2 < 16 ? '#f39c12' : '#e74c3c',
+  };
+}
+
+function carbonBadge(prop, nights = 1) {
+  const c = calcCarbon(prop, nights);
+  return `
+    <div class="carbon-box">
+      <div class="carbon-title">🌱 Environmental Impact <span class="carbon-rating" style="color:${c.color};">${c.rating} Impact</span></div>
+      <div class="carbon-metrics">
+        <div class="carbon-metric">
+          <div class="cm-icon">✈️</div>
+          <div class="cm-val">${c.co2} kg</div>
+          <div class="cm-label">CO₂ / stay</div>
+        </div>
+        <div class="carbon-metric">
+          <div class="cm-icon">⚡</div>
+          <div class="cm-val">${c.energy} kWh</div>
+          <div class="cm-label">Energy / stay</div>
+        </div>
+        <div class="carbon-metric">
+          <div class="cm-icon">💧</div>
+          <div class="cm-val">${c.water}L</div>
+          <div class="cm-label">Water / stay</div>
+        </div>
+      </div>
+    </div>`;
+}
+
 async function loadProperty() {
   const data = await api(`/api/properties/${propId}/`);
   if (!data) {
@@ -71,16 +117,45 @@ async function loadProperty() {
             ${data.amenities.map(a => `<div class="amenity-item">${amenityIcon(a)} ${a}</div>`).join('')}
           </div>
         </div>` : ''}
-        <div class="detail-section">
-          <h3>★ Reviews <span id="reviewBadge"></span></h3>
+
+        ${carbonBadge(data)}
+
+        <div class="detail-section" id="reviewsSection">
+          <div class="reviews-header">
+            <h3>★ Reviews <span id="reviewBadge"></span></h3>
+            <button class="btn-sm" onclick="toggleReviewForm()" id="writeReviewBtn">Write a Review</button>
+          </div>
+
+          <div id="reviewFormBox" class="hidden">
+            <div class="review-form-card">
+              <h4>Share your experience</h4>
+              <div class="star-picker" id="starPicker">
+                ${[1,2,3,4,5].map(n => `<span class="star-pick" data-val="${n}" onclick="setRating(${n})">☆</span>`).join('')}
+              </div>
+              <textarea id="reviewComment" rows="3" placeholder="Tell others about your stay..." style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.88rem;outline:none;resize:vertical;margin-top:0.75rem;"></textarea>
+
+              <div class="review-image-upload" style="margin-top:0.75rem;">
+                <label style="font-size:0.78rem;color:var(--text2);display:block;margin-bottom:6px;">📸 Add photos (optional)</label>
+                <div class="review-upload-area" onclick="document.getElementById('reviewImages').click()">
+                  <span>Click to upload photos</span>
+                  <input type="file" id="reviewImages" multiple accept="image/*" style="display:none" onchange="previewReviewImages(this)">
+                </div>
+                <div id="reviewImagePreviews" class="review-img-previews"></div>
+              </div>
+
+              <div style="display:flex;gap:8px;margin-top:0.75rem;">
+                <button class="btn-primary" onclick="submitReview(${data.id})" id="submitReviewBtn">Post Review</button>
+                <button class="btn-ghost" onclick="toggleReviewForm()" style="font-size:0.82rem;">Cancel</button>
+              </div>
+            </div>
+          </div>
+
           <div id="reviewsList">Loading reviews...</div>
         </div>
       </div>
 
       <div class="detail-right">
         <div class="booking-card" id="bookingCard">
-
-          <!-- STEP 1: Date selection -->
           <div id="step1">
             <div class="booking-price">
               <span class="price-big">$${parseFloat(data.price_per_night).toFixed(2)}</span>
@@ -113,13 +188,13 @@ async function loadProperty() {
               </select>
             </div>
             <div class="price-summary hidden" id="priceSummary"></div>
+            <div id="carbonPreview" class="hidden" style="margin-bottom:0.75rem;"></div>
             <button class="btn-primary w-full" id="bookBtn" onclick="initiateBooking(${data.id}, ${data.price_per_night})">
               ₿ Pay with Crypto
             </button>
             <p class="booking-note">Powered by crypto — secure & instant</p>
           </div>
 
-          <!-- STEP 2: Payment address -->
           <div id="step2" class="hidden">
             <div class="pay-step-header">
               <div class="pay-step-icon">₿</div>
@@ -128,42 +203,23 @@ async function loadProperty() {
                 <div class="pay-step-sub" id="payNetwork"></div>
               </div>
             </div>
-
-            <div class="pay-info-row">
-              <span class="pay-label">Property</span>
-              <span class="pay-val" id="payPropName"></span>
-            </div>
-            <div class="pay-info-row">
-              <span class="pay-label">Amount (USD)</span>
-              <span class="pay-val gold" id="payUSD"></span>
-            </div>
-            <div class="pay-info-row">
-              <span class="pay-label">Send exactly</span>
-              <span class="pay-val gold" id="payCryptoAmount"></span>
-            </div>
-
+            <div class="pay-info-row"><span class="pay-label">Property</span><span class="pay-val" id="payPropName"></span></div>
+            <div class="pay-info-row"><span class="pay-label">Amount (USD)</span><span class="pay-val gold" id="payUSD"></span></div>
+            <div class="pay-info-row"><span class="pay-label">Send exactly</span><span class="pay-val gold" id="payCryptoAmount"></span></div>
             <div class="pay-address-label">Send to this address:</div>
             <div class="pay-address-box" id="payAddress" onclick="copyPayAddress()"></div>
             <button class="pay-copy-btn" onclick="copyPayAddress()">📋 Copy Address</button>
-
             <div class="pay-timer" id="payTimer">⏳ Expires in 60:00</div>
-
             <div class="pay-steps">
               <div class="pay-step-item done">✓ Payment address generated</div>
               <div class="pay-step-item" id="psi2">◎ Waiting for transaction...</div>
               <div class="pay-step-item" id="psi3">◎ Confirming on blockchain</div>
               <div class="pay-step-item" id="psi4">◎ Booking confirmed</div>
             </div>
-
-            <button class="btn-primary w-full" id="confirmPayBtn" onclick="confirmPayment()" style="margin-top:1rem;">
-              ✓ I've sent the payment
-            </button>
-            <button class="btn-outline w-full" onclick="resetToStep1()" style="margin-top:0.5rem;font-size:0.82rem;">
-              ← Change dates
-            </button>
+            <button class="btn-primary w-full" id="confirmPayBtn" onclick="confirmPayment()" style="margin-top:1rem;">✓ I've sent the payment</button>
+            <button class="btn-outline w-full" onclick="resetToStep1()" style="margin-top:0.5rem;font-size:0.82rem;">← Change dates</button>
           </div>
 
-          <!-- STEP 3: Confirming -->
           <div id="step3" class="hidden">
             <div class="confirming-box">
               <div class="confirming-spinner"></div>
@@ -177,19 +233,15 @@ async function loadProperty() {
             </div>
           </div>
 
-          <!-- STEP 4: Success -->
           <div id="step4" class="hidden">
             <div class="success-box">
               <div class="success-icon">✓</div>
               <div class="success-title">Booking Confirmed!</div>
               <div class="success-sub">Your crypto payment was received and booking is confirmed.</div>
               <div class="success-detail" id="successDetail"></div>
-              <a href="/bookings" class="btn-primary w-full" style="margin-top:1.25rem;display:block;text-align:center;text-decoration:none;">
-                View My Bookings
-              </a>
+              <a href="/bookings" class="btn-primary w-full" style="margin-top:1.25rem;display:block;text-align:center;text-decoration:none;">View My Bookings</a>
             </div>
           </div>
-
         </div>
       </div>
     </div>
@@ -200,8 +252,8 @@ async function loadProperty() {
   const checkOut = document.getElementById('checkOut');
   checkIn.min = today;
   checkOut.min = today;
-  checkIn.addEventListener('change', () => { checkOut.min = checkIn.value; updatePrice(data.price_per_night); });
-  checkOut.addEventListener('change', () => updatePrice(data.price_per_night));
+  checkIn.addEventListener('change', () => { checkOut.min = checkIn.value; updatePrice(data.price_per_night, data); });
+  checkOut.addEventListener('change', () => updatePrice(data.price_per_night, data));
 
   loadReviews(data.id);
 }
@@ -217,10 +269,11 @@ function setMainImage(url, el) {
   el.classList.add('active');
 }
 
-function updatePrice(pricePerNight) {
+function updatePrice(pricePerNight, propData) {
   const ci = document.getElementById('checkIn').value;
   const co = document.getElementById('checkOut').value;
   const summary = document.getElementById('priceSummary');
+  const carbonPreview = document.getElementById('carbonPreview');
   if (ci && co && co > ci) {
     const nights = Math.round((new Date(co) - new Date(ci)) / 86400000);
     const total = nights * pricePerNight;
@@ -228,97 +281,176 @@ function updatePrice(pricePerNight) {
       <div class="price-row"><span>${nights} night${nights>1?'s':''} × $${parseFloat(pricePerNight).toFixed(2)}</span><span>$${total.toFixed(2)}</span></div>
       <div class="price-row total"><span>Total</span><span>$${total.toFixed(2)}</span></div>`;
     summary.classList.remove('hidden');
+
+    if (propData) {
+      const c = calcCarbon(propData, nights);
+      carbonPreview.innerHTML = `<div style="font-size:0.75rem;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;display:flex;gap:12px;justify-content:center;">
+        <span>🌱 ${c.co2}kg CO₂</span><span>⚡ ${c.energy}kWh</span><span>💧 ${c.water}L</span>
+      </div>`;
+      carbonPreview.classList.remove('hidden');
+    }
   } else {
     summary.classList.add('hidden');
+    carbonPreview.classList.add('hidden');
   }
 }
 
+// ── REVIEW SYSTEM ────────────────────────
+let selectedRating = 0;
+
+function setRating(val) {
+  selectedRating = val;
+  document.querySelectorAll('.star-pick').forEach((s, i) => {
+    s.textContent = i < val ? '★' : '☆';
+    s.style.color = i < val ? 'var(--gold)' : 'var(--text2)';
+  });
+}
+
+function toggleReviewForm() {
+  if (!getToken()) { showModal('loginModal'); return; }
+  const box = document.getElementById('reviewFormBox');
+  box.classList.toggle('hidden');
+  selectedRating = 0;
+  document.querySelectorAll('.star-pick').forEach(s => { s.textContent = '☆'; s.style.color = 'var(--text2)'; });
+  document.getElementById('reviewComment').value = '';
+  document.getElementById('reviewImagePreviews').innerHTML = '';
+}
+
+function previewReviewImages(input) {
+  const container = document.getElementById('reviewImagePreviews');
+  container.innerHTML = '';
+  Array.from(input.files).slice(0, 4).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      img.className = 'review-preview-img';
+      container.appendChild(img);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function submitReview(propId) {
+  if (!selectedRating) { showToast('Please select a rating', 'error'); return; }
+  const comment = document.getElementById('reviewComment').value.trim();
+  if (!comment) { showToast('Please write a comment', 'error'); return; }
+
+  const btn = document.getElementById('submitReviewBtn');
+  btn.disabled = true; btn.textContent = 'Posting...';
+
+  const result = await api('/api/auth/reviews/', 'POST', {
+    prop: propId,
+    rating: selectedRating,
+    comment: comment
+  });
+
+  btn.disabled = false; btn.textContent = 'Post Review';
+
+  if (result) {
+    showToast('Review posted! Thank you 🌟', 'success');
+    toggleReviewForm();
+    loadReviews(propId);
+  }
+}
+
+async function loadReviews(propId) {
+  const list = document.getElementById('reviewsList');
+  const data = await api(`/api/auth/reviews/?property=${propId}`);
+
+  if (!data || !data.results || data.results.length === 0) {
+    list.innerHTML = '<p class="no-reviews">No reviews yet. Be the first to share your experience!</p>';
+    document.getElementById('reviewBadge').textContent = '';
+    return;
+  }
+
+  document.getElementById('reviewBadge').textContent = `(${data.count})`;
+  list.innerHTML = data.results.map(r => `
+    <div class="review-card">
+      <div class="review-header">
+        <div class="review-avatar">${(r.reviewer_name||'?')[0].toUpperCase()}</div>
+        <div style="flex:1;">
+          <p class="reviewer-name">${r.reviewer_name}</p>
+          <p class="review-date">${new Date(r.created_at).toLocaleDateString('en-US',{year:'numeric',month:'long'})}</p>
+        </div>
+        <div class="review-stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
+      </div>
+      <p class="review-text">${r.comment}</p>
+      ${r.images && r.images.length ? `
+        <div class="review-images">
+          ${r.images.map(img => `<img src="${img.image_url}" class="review-img-thumb" onclick="openReviewImg('${img.image_url}')">`).join('')}
+        </div>` : ''}
+    </div>`).join('');
+}
+
+function openReviewImg(url) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+  overlay.innerHTML = `<img src="${url}" style="max-width:90vw;max-height:90vh;border-radius:12px;object-fit:contain;">`;
+  overlay.onclick = () => document.body.removeChild(overlay);
+  document.body.appendChild(overlay);
+}
+
+// ── BOOKING FLOW ─────────────────────────
 let currentPaymentId = null;
 let timerInterval = null;
 
 async function initiateBooking(propId, price) {
-  console.log('BOOKING:', propId, 'CI:', document.getElementById('checkIn')?.value, 'CO:', document.getElementById('checkOut')?.value);
   if (!getToken()) { showModal('loginModal'); return; }
-
   const ci = document.getElementById('checkIn').value;
   const co = document.getElementById('checkOut').value;
   const guests = parseInt(document.getElementById('bookGuests').value);
   const currency = document.getElementById('bookCurrency').value;
-
   if (!ci || !co) { showToast('Please select dates', 'error'); return; }
   if (co <= ci) { showToast('Check-out must be after check-in', 'error'); return; }
 
   const btn = document.getElementById('bookBtn');
-  btn.disabled = true;
-  btn.textContent = 'Generating address...';
+  btn.disabled = true; btn.textContent = 'Generating address...';
 
   const result = await api('/api/bookings/initiate/', 'POST', {
-    listing: parseInt(propId),
-    check_in: ci,
-    check_out: co,
-    guests_count: guests,
-    currency: currency
+    listing: parseInt(propId), check_in: ci, check_out: co, guests_count: guests, currency
   });
 
-  btn.disabled = false;
-  btn.textContent = '₿ Pay with Crypto';
-
-  if (!result || result.error) {
-    showToast(result?.error || 'Failed to initiate payment', 'error');
-    return;
-  }
+  btn.disabled = false; btn.textContent = '₿ Pay with Crypto';
+  if (!result || result.error) { showToast(result?.error || 'Failed to initiate payment', 'error'); return; }
 
   currentPaymentId = result.payment_id;
-
   document.getElementById('payPropName').textContent = result.property;
   document.getElementById('payUSD').textContent = `$${parseFloat(result.amount_usd).toFixed(2)}`;
   document.getElementById('payCryptoAmount').textContent = `${result.pay_amount} ${result.pay_currency}`;
   document.getElementById('payAddress').textContent = result.pay_address;
   document.getElementById('payNetwork').textContent = result.network;
-
   showStep('step2');
   startTimer(3600);
 }
 
 async function confirmPayment() {
   if (!currentPaymentId) return;
-
   const btn = document.getElementById('confirmPayBtn');
-  btn.disabled = true;
-  btn.textContent = 'Verifying...';
-
+  btn.disabled = true; btn.textContent = 'Verifying...';
   showStep('step3');
-
-  // Simulate blockchain confirmation delay
   await new Promise(r => setTimeout(r, 1500));
   document.getElementById('cs2').classList.add('done');
   document.getElementById('cs2').textContent = '✓ Transaction confirmed';
   document.getElementById('cs3').classList.add('active');
   document.getElementById('cs3').textContent = '⟳ Creating booking...';
-
   await new Promise(r => setTimeout(r, 1500));
-
   const result = await api(`/api/bookings/payment-status/${currentPaymentId}/`, 'POST', {});
-
   if (result && result.booking_created) {
     document.getElementById('cs3').classList.add('done');
     document.getElementById('cs3').textContent = '✓ Booking created';
-
     await new Promise(r => setTimeout(r, 500));
-
     document.getElementById('successDetail').innerHTML = `
       <div style="margin-top:0.75rem;font-size:0.85rem;color:var(--text2);">
         <div><strong style="color:var(--text);">${result.property}</strong></div>
         <div>Booking #${result.booking_id}</div>
         <div>Total paid: $${parseFloat(result.amount).toFixed(2)}</div>
       </div>`;
-
     if (timerInterval) clearInterval(timerInterval);
     showStep('step4');
   } else {
     showStep('step2');
-    btn.disabled = false;
-    btn.textContent = '✓ I\'ve sent the payment';
+    btn.disabled = false; btn.textContent = '✓ I\'ve sent the payment';
     showToast(result?.error || 'Verification failed. Try again.', 'error');
   }
 }
@@ -339,8 +471,7 @@ function resetToStep1() {
 }
 
 function copyPayAddress() {
-  const addr = document.getElementById('payAddress').textContent.trim();
-  navigator.clipboard.writeText(addr);
+  navigator.clipboard.writeText(document.getElementById('payAddress').textContent.trim());
   showToast('Address copied!', 'success');
 }
 
@@ -350,44 +481,41 @@ function startTimer(seconds) {
   const el = document.getElementById('payTimer');
   timerInterval = setInterval(() => {
     remaining--;
-    const m = Math.floor(remaining / 60).toString().padStart(2, '0');
-    const s = (remaining % 60).toString().padStart(2, '0');
+    const m = Math.floor(remaining/60).toString().padStart(2,'0');
+    const s = (remaining%60).toString().padStart(2,'0');
     if (el) el.textContent = `⏳ Expires in ${m}:${s}`;
-    if (remaining <= 0) {
-      clearInterval(timerInterval);
-      if (el) el.textContent = '⌛ Payment expired';
-      showToast('Payment session expired. Please start again.', 'error');
-      resetToStep1();
-    }
+    if (remaining <= 0) { clearInterval(timerInterval); if (el) el.textContent = '⌛ Payment expired'; resetToStep1(); }
   }, 1000);
-}
-
-async function loadReviews(propId) {
-  const list = document.getElementById('reviewsList');
-  const data = await api(`/api/auth/reviews/?property=${propId}`);
-  if (!data || !data.results || data.results.length === 0) {
-    list.innerHTML = '<p class="no-reviews">No reviews yet. Be the first!</p>';
-    return;
-  }
-  document.getElementById('reviewBadge').textContent = `(${data.count})`;
-  list.innerHTML = data.results.map(r => `
-    <div class="review-card">
-      <div class="review-header">
-        <div class="review-avatar">${(r.reviewer_name||'?')[0].toUpperCase()}</div>
-        <div>
-          <p class="reviewer-name">${r.reviewer_name}</p>
-          <p class="review-date">${new Date(r.created_at).toLocaleDateString('en-US',{year:'numeric',month:'long'})}</p>
-        </div>
-        <div class="review-stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
-      </div>
-      <p class="review-text">${r.comment}</p>
-    </div>`).join('');
 }
 
 loadProperty();
 </script>
 
 <style>
+.carbon-box { background:linear-gradient(135deg,rgba(46,204,113,0.06),rgba(0,0,0,0)); border:1px solid rgba(46,204,113,0.2); border-radius:var(--r2); padding:1.2rem; margin:1.5rem 0; }
+.carbon-title { font-size:0.88rem; font-weight:600; margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center; }
+.carbon-rating { font-size:0.78rem; font-weight:700; }
+.carbon-metrics { display:flex; gap:0; }
+.carbon-metric { flex:1; text-align:center; padding:0.5rem; border-right:1px solid rgba(46,204,113,0.15); }
+.carbon-metric:last-child { border-right:none; }
+.cm-icon { font-size:1.2rem; }
+.cm-val { font-size:1rem; font-weight:700; color:#2ecc71; margin:2px 0; }
+.cm-label { font-size:0.68rem; color:var(--text2); text-transform:uppercase; letter-spacing:0.05em; }
+
+.reviews-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; }
+.review-form-card { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:1.2rem; margin-bottom:1.2rem; }
+.review-form-card h4 { font-size:0.9rem; margin-bottom:0.75rem; }
+.star-picker { display:flex; gap:6px; }
+.star-pick { font-size:1.6rem; cursor:pointer; color:var(--text2); transition:all 0.15s; }
+.star-pick:hover { transform:scale(1.2); }
+.review-upload-area { border:1px dashed var(--border); border-radius:8px; padding:10px; text-align:center; cursor:pointer; font-size:0.8rem; color:var(--text2); transition:border-color 0.2s; }
+.review-upload-area:hover { border-color:var(--gold); }
+.review-img-previews { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+.review-preview-img { width:70px; height:70px; object-fit:cover; border-radius:8px; border:1px solid var(--border); }
+.review-images { display:flex; gap:8px; flex-wrap:wrap; margin-top:0.75rem; }
+.review-img-thumb { width:80px; height:80px; object-fit:cover; border-radius:8px; cursor:pointer; border:1px solid var(--border); transition:transform 0.2s; }
+.review-img-thumb:hover { transform:scale(1.05); }
+
 .pay-step-header { display:flex; align-items:center; gap:12px; margin-bottom:1.2rem; padding-bottom:1rem; border-bottom:1px solid var(--border); }
 .pay-step-icon { width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--gold)); display:flex; align-items:center; justify-content:center; font-size:1.2rem; flex-shrink:0; }
 .pay-step-title { font-weight:700; font-size:0.95rem; }

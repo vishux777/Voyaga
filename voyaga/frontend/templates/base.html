@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 {% load static %}
 <link rel="stylesheet" href="{% static 'css/main.css' %}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%238B5CF6'/><text y='.9em' font-size='60' x='18' fill='white'>✦</text></svg>">
 </head>
 <body>
 
@@ -18,8 +19,8 @@
       <span class="logo-text">Voyaga</span>
     </a>
     <div class="nav-links">
-      <a href="/" class="nav-link" data-page="home">Explore</a>
-      <a href="/properties" class="nav-link" data-page="properties">Stays</a>
+      <a href="/" class="nav-link">Explore</a>
+      <a href="/properties" class="nav-link">Stays</a>
       <a href="/about" class="nav-link">About</a>
       <a href="/list-property" class="nav-link">Host</a>
     </div>
@@ -28,17 +29,33 @@
       <button class="btn-primary" onclick="showModal('registerModal')">Join Free</button>
     </div>
     <div class="nav-user hidden" id="navUser">
-      
+      <!-- Notification Bell -->
+      <div class="notif-bell" id="notifBell">
+        <span class="bell-icon" onclick="toggleNotifications()">🔔</span>
+        <span class="notif-badge hidden" id="notifBadge">0</span>
+        <div class="notif-dropdown hidden" id="notifDropdown">
+          <div class="notif-header">
+            <span>Notifications</span>
+            <button onclick="markAllRead(event)">Mark all read</button>
+          </div>
+          <div id="notifList"><div class="notif-empty">Loading...</div></div>
+        </div>
+      </div>
+      <!-- User Avatar -->
       <div class="user-menu" id="userMenuBtn">
-  <div class="avatar-circle" id="userAvatar" onclick="toggleDropdown()">G</div>
-  <div class="user-dropdown" id="userDropdown">
-    <a href="/dashboard">Dashboard</a>
-    <a href="/bookings">My Bookings</a>
-    <a href="/profile">Profile</a>
-    <hr>
-    <a href="#" onclick="logout()">Sign Out</a>
-  </div>
-</div>
+        <div class="avatar-circle" id="userAvatar" onclick="toggleDropdown()">G</div>
+        <div class="user-dropdown" id="userDropdown">
+          <a href="/dashboard">Dashboard</a>
+          <a href="/bookings">My Bookings</a>
+          <a href="/my-listings">My Listings</a>
+          <a href="/profile">Profile</a>
+          <a href="/list-property">List Property</a>
+          <hr>
+          <a href="mailto:help@voyaga.com">💬 Help & Support</a>
+          <hr>
+          <a href="#" onclick="logout()">Sign Out</a>
+        </div>
+      </div>
     </div>
   </div>
 </nav>
@@ -46,6 +63,61 @@
 <main id="appContent">
   {% block content %}{% endblock %}
 </main>
+
+<!-- FOOTER -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <div class="footer-logo">
+        <div class="logo-orb" style="width:28px;height:28px;"></div>
+        <span style="font-size:1.2rem;font-weight:700;">Voyaga</span>
+      </div>
+      <p class="footer-tagline">Travel reimagined for the digital age. Book extraordinary stays around the world, powered by cryptocurrency.</p>
+      <div class="footer-heart">Made with 💗 by <strong>Team Voyaga(DE)</strong></div>
+    </div>
+    <div class="footer-links-group">
+      <h4>Explore</h4>
+      <a href="/properties">Browse Stays</a>
+      <a href="/about">About Voyaga</a>
+      <a href="/list-property">Become a Host</a>
+      <a href="/my-listings">My Listings</a>
+      <a href="/dashboard">Dashboard</a>
+    </div>
+    <div class="footer-links-group">
+      <h4>Features</h4>
+      <a href="/about">AI-Powered Matching</a>
+      <a href="/about">Carbon Footprint Tracker</a>
+      <a href="/about">Crypto Payments</a>
+      <a href="/about">Verified Reviews</a>
+    </div>
+    <div class="footer-links-group">
+      <h4>Support</h4>
+      <a href="mailto:help@voyaga.com">📧 help@voyaga.com</a>
+      <a href="#">FAQ</a>
+      <a href="#">Privacy Policy</a>
+      <a href="#">Terms of Service</a>
+      <div class="helpline-box">
+        <div class="helpline-title">Need help?</div>
+        <a href="mailto:help@voyaga.com" class="helpline-email">help@voyaga.com</a>
+        <div class="helpline-sub">We respond within 24 hours</div>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 Voyaga · Team Voyaga(DE) · All rights reserved</span>
+    <div class="footer-bottom-badges">
+      <span class="footer-badge">🔐 Blockchain Secured</span>
+      <span class="footer-badge">🌱 Carbon Tracked</span>
+      <span class="footer-badge">🤖 AI Powered</span>
+    </div>
+  </div>
+</footer>
+
+<!-- Floating Help Button -->
+<a href="mailto:help@voyaga.com" class="help-float" title="Contact Support — help@voyaga.com">
+  <span>💬</span>
+  <span class="help-float-label">Help</span>
+</a>
 
 <!-- AI Chat Bubble -->
 <div class="chat-bubble" id="chatBubble" onclick="toggleChat()">
@@ -79,9 +151,7 @@
   </div>
   <div class="chat-messages" id="chatMessages">
     <div class="chat-msg ai">
-      <div class="msg-bubble">
-        Hello! I'm <strong>Voya</strong>, your AI travel companion. I can help you discover perfect stays, plan your trip, or answer any questions. Where shall we go? ✈️
-      </div>
+      <div class="msg-bubble">Hello! I'm <strong>Voya</strong>, your AI travel companion. I can help you discover perfect stays, plan your trip, or answer any questions. Where shall we go? ✈️</div>
     </div>
   </div>
   <div class="chat-input-area">
@@ -181,8 +251,44 @@
 </div>
 
 <div class="toast hidden" id="toast"></div>
-
 <script src="{% static 'js/app.js' %}"></script>
 {% block scripts %}{% endblock %}
+
+<style>
+.notif-bell { position:relative; cursor:pointer; padding:6px 8px; border-radius:50%; transition:background 0.2s; margin-right:4px; display:flex; align-items:center; }
+.notif-bell:hover { background:var(--surface2); }
+.bell-icon { font-size:1.1rem; }
+.notif-badge { position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; background:#e74c3c; color:white; font-size:0.6rem; font-weight:700; border-radius:10px; display:flex; align-items:center; justify-content:center; padding:0 3px; }
+.notif-dropdown { position:absolute; top:calc(100% + 10px); right:-10px; width:300px; background:var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow:0 16px 48px rgba(0,0,0,0.5); z-index:1000; overflow:hidden; }
+.notif-header { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid var(--border); font-size:0.85rem; font-weight:600; }
+.notif-header button { background:none; border:none; color:var(--gold); font-size:0.72rem; cursor:pointer; font-family:inherit; }
+.notif-item { padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; transition:background 0.15s; }
+.notif-item:hover { background:var(--surface2); }
+.notif-item.unread { border-left:3px solid var(--gold); }
+.notif-item-title { font-size:0.82rem; font-weight:600; margin-bottom:3px; }
+.notif-item-msg { font-size:0.75rem; color:var(--text2); line-height:1.4; }
+.notif-item-time { font-size:0.68rem; color:var(--text2); margin-top:4px; opacity:0.7; }
+.notif-empty { padding:1.5rem; text-align:center; color:var(--text2); font-size:0.82rem; }
+.help-float { position:fixed; bottom:100px; right:24px; background:var(--surface); border:1px solid var(--border); border-radius:24px; padding:8px 14px; display:flex; align-items:center; gap:6px; font-size:0.8rem; color:var(--text2); text-decoration:none; z-index:900; transition:all 0.2s; box-shadow:0 4px 16px rgba(0,0,0,0.3); }
+.help-float:hover { border-color:var(--gold); color:var(--gold); transform:translateY(-2px); }
+.helpline-box { margin-top:1rem; background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+.helpline-title { font-size:0.75rem; font-weight:700; margin-bottom:4px; }
+.helpline-email { font-size:0.82rem; color:var(--gold); text-decoration:none; display:block; }
+.helpline-email:hover { text-decoration:underline; }
+.helpline-sub { font-size:0.7rem; color:var(--text2); margin-top:2px; }
+.site-footer { background:var(--surface); border-top:1px solid var(--border); margin-top:4rem; }
+.footer-inner { max-width:1200px; margin:0 auto; padding:3.5rem 2rem 2rem; display:grid; grid-template-columns:1.8fr 1fr 1fr 1fr; gap:2.5rem; }
+.footer-brand .footer-logo { display:flex; align-items:center; gap:10px; margin-bottom:0.75rem; }
+.footer-tagline { font-size:0.82rem; color:var(--text2); line-height:1.65; max-width:280px; margin-bottom:1rem; }
+.footer-heart { font-size:0.82rem; color:var(--text2); background:var(--bg2); border:1px solid var(--border); border-radius:20px; display:inline-block; padding:5px 14px; }
+.footer-links-group h4 { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--gold); margin-bottom:1rem; }
+.footer-links-group a { display:block; font-size:0.83rem; color:var(--text2); text-decoration:none; margin-bottom:0.5rem; transition:color 0.2s; }
+.footer-links-group a:hover { color:var(--text); }
+.footer-bottom { max-width:1200px; margin:0 auto; padding:1.2rem 2rem; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem; font-size:0.75rem; color:var(--text2); }
+.footer-bottom-badges { display:flex; gap:0.5rem; flex-wrap:wrap; }
+.footer-badge { background:var(--bg2); border:1px solid var(--border); border-radius:14px; padding:3px 10px; font-size:0.72rem; }
+@media (max-width:768px) { .footer-inner { grid-template-columns:1fr 1fr; } .footer-brand { grid-column:1/-1; } }
+@media (max-width:480px) { .footer-inner { grid-template-columns:1fr; } }
+</style>
 </body>
 </html>

@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% block title %}My Listings — Voyaga{% endblock %}
+{% block content %}
+
+<div class="page-container">
+  <div class="page-header-row">
+    <h1 class="page-title">My Listings</h1>
+    <a href="/list-property" class="btn-primary">+ Add New Listing</a>
+  </div>
+
+  <div id="listingsContainer">
+    <div class="skeleton-card"></div>
+    <div class="skeleton-card"></div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+if (!getToken()) window.location.href = '/';
+
+async function loadMyListings() {
+  const data = await api('/api/properties/my/');
+  const container = document.getElementById('listingsContainer');
+
+  if (!data || !data.results || data.results.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state-full">
+        <span>🏠</span>
+        <p>You haven't listed any properties yet.</p>
+        <a href="/list-property" class="btn-primary" style="margin-top:1rem;display:inline-block;">List your first property →</a>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = data.results.map(p => `
+    <div class="listing-manage-card" id="listing-${p.id}">
+      <div class="lmc-img">
+        ${p.primary_image_url
+          ? `<img src="${p.primary_image_url}" alt="${p.title}">`
+          : '<div class="no-img" style="height:100%;display:flex;align-items:center;justify-content:center;font-size:2rem;">🏠</div>'}
+      </div>
+      <div class="lmc-info">
+        <div class="lmc-header">
+          <div>
+            <h3 onclick="window.location.href='/property/${p.id}'" style="cursor:pointer;">${p.title}</h3>
+            <p class="lmc-location">📍 ${p.city}, ${p.country}</p>
+          </div>
+          <span class="lmc-status ${p.is_active ? 'active' : 'inactive'}">
+            ${p.is_active ? '● Live' : '○ Delisted'}
+          </span>
+        </div>
+        <div class="lmc-stats">
+          <div class="lmc-stat"><span>💰</span> $${parseFloat(p.price_per_night).toFixed(0)}/night</div>
+          <div class="lmc-stat"><span>👥</span> ${p.max_guests} guests</div>
+          <div class="lmc-stat"><span>🛏️</span> ${p.bedrooms} bed</div>
+          <div class="lmc-stat"><span>★</span> ${p.avg_rating || 'No reviews'}</div>
+        </div>
+        <div class="lmc-actions">
+          <a href="/property/${p.id}" class="btn-sm">View</a>
+          ${p.is_active
+            ? `<button class="btn-danger-sm" onclick="toggleListing(${p.id}, false)">Delist</button>`
+            : `<button class="btn-sm" onclick="toggleListing(${p.id}, true)">Re-list</button>`}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+async function toggleListing(id, activate) {
+  const action = activate ? 'activate' : 'delist';
+  const confirm_msg = activate
+    ? 'Re-list this property? It will become visible to travellers again.'
+    : 'Delist this property? It will be hidden from search results.';
+
+  if (!confirm(confirm_msg)) return;
+
+  const result = await api(`/api/properties/${id}/${action}/`, 'POST', {});
+  if (result) {
+    showToast(result.message || (activate ? 'Property listed!' : 'Property delisted'), 'success');
+    loadMyListings();
+  }
+}
+
+loadMyListings();
+</script>
+
+<style>
+.listing-manage-card {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  overflow: hidden;
+  margin-bottom: 1rem;
+  transition: all 0.2s;
+}
+.listing-manage-card:hover { border-color: var(--gold); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+.lmc-img { width: 180px; flex-shrink: 0; background: var(--surface2); }
+.lmc-img img { width: 100%; height: 100%; object-fit: cover; }
+.lmc-info { flex: 1; padding: 1.2rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.lmc-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.lmc-header h3 { font-size: 1rem; margin-bottom: 4px; }
+.lmc-location { font-size: 0.8rem; color: var(--text2); }
+.lmc-status { font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+.lmc-status.active { background: rgba(46,204,113,0.1); color: #2ecc71; border: 1px solid rgba(46,204,113,0.3); }
+.lmc-status.inactive { background: rgba(231,76,60,0.1); color: #e74c3c; border: 1px solid rgba(231,76,60,0.3); }
+.lmc-stats { display: flex; gap: 1rem; flex-wrap: wrap; }
+.lmc-stat { font-size: 0.82rem; color: var(--text2); display: flex; align-items: center; gap: 4px; }
+.lmc-actions { display: flex; gap: 8px; margin-top: auto; }
+
+@media (max-width: 600px) {
+  .listing-manage-card { flex-direction: column; }
+  .lmc-img { width: 100%; height: 160px; }
+}
+</style>
+{% endblock %}

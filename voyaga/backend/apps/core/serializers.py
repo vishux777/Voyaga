@@ -55,6 +55,10 @@ class ReviewSerializer(serializers.ModelSerializer):
         fields = ['id', 'reviewer', 'reviewer_name', 'reviewer_avatar',
                   'prop', 'booking', 'rating', 'comment', 'created_at']
         read_only_fields = ['id', 'reviewer', 'created_at']
+        extra_kwargs = {
+            'booking': {'required': False, 'allow_null': True},
+            'prop':    {'required': False, 'allow_null': True},
+        }
 
     def get_reviewer_name(self, obj):
         return f"{obj.reviewer.first_name} {obj.reviewer.last_name}".strip() or obj.reviewer.username
@@ -68,13 +72,22 @@ class ReviewSerializer(serializers.ModelSerializer):
     def validate(self, data):
         booking = data.get('booking')
         request = self.context.get('request')
-        if booking and booking.guest != request.user:
-            raise serializers.ValidationError("You can only review your own bookings.")
-        if booking and booking.status != 'completed':
-            raise serializers.ValidationError("Can only review completed bookings.")
+
+        if booking:
+            if booking.guest != request.user:
+                raise serializers.ValidationError("You can only review your own bookings.")
+            if booking.status != 'completed':
+                raise serializers.ValidationError("Can only review completed bookings.")
+
+        prop = data.get('prop')
+        if not prop and not booking:
+            raise serializers.ValidationError("Either prop or booking must be provided.")
+
         return data
 
     def create(self, validated_data):
         validated_data['reviewer'] = self.context['request'].user
-        validated_data['prop'] = validated_data['booking'].listing
+        booking = validated_data.get('booking')
+        if booking and not validated_data.get('prop'):
+            validated_data['prop'] = booking.listing
         return super().create(validated_data)

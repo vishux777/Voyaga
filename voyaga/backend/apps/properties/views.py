@@ -45,7 +45,7 @@ class PropertyListView(generics.ListAPIView):
 
 
 class PropertyDetailView(generics.RetrieveAPIView):
-    queryset = Property.objects.filter(is_active=True).prefetch_related('images', 'reviews__reviewer')
+    queryset = Property.objects.prefetch_related('images', 'reviews__reviewer')
     serializer_class = PropertyDetailSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -66,11 +66,12 @@ class PropertyCreateView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
         user = self.request.user
-        # Auto-upgrade to host role when they list a property
         if user.role != 'host':
             user.role = 'host'
             user.save()
         serializer.save()
+
+
 class PropertyUpdateView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = PropertyCreateSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -84,12 +85,41 @@ class MyPropertiesView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Property.objects.filter(host=self.request.user).prefetch_related('images', 'reviews')
+        # Show ALL properties (active + delisted) for the host
+        return Property.objects.filter(
+            host=self.request.user
+        ).prefetch_related('images', 'reviews').order_by('-created_at')
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
         ctx['request'] = self.request
         return ctx
+
+
+class PropertyDelistView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            prop = Property.objects.get(pk=pk, host=request.user)
+        except Property.DoesNotExist:
+            return Response({'error': 'Property not found'}, status=404)
+        prop.is_active = False
+        prop.save()
+        return Response({'message': 'Property delisted successfully'})
+
+
+class PropertyActivateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            prop = Property.objects.get(pk=pk, host=request.user)
+        except Property.DoesNotExist:
+            return Response({'error': 'Property not found'}, status=404)
+        prop.is_active = True
+        prop.save()
+        return Response({'message': 'Property is now live again!'})
 
 
 class PropertyImageUploadView(APIView):
@@ -104,12 +134,21 @@ class PropertyImageUploadView(APIView):
 
         images = request.FILES.getlist('images')
         if not images:
-            return Response({'error': 'No images provided'}, status=400)
+            # Try single image key too
+            single = request.FILES.get('image')
+            if single:
+                images = [single]
+            else:
+                return Response({'error': 'No images provided'}, status=400)
 
         created = []
         for i, img in enumerate(images):
             is_primary = i == 0 and not prop.images.filter(is_primary=True).exists()
-            pi = PropertyImage.objects.create(property=prop, image=img, is_primary=is_primary)
+            pi = PropertyImage.objects.create(
+                property=prop,
+                image=img,
+                is_primary=is_primary
+            )
             created.append(PropertyImageSerializer(pi, context={'request': request}).data)
 
         return Response(created, status=201)
@@ -123,8 +162,9 @@ class RecommendationsView(APIView):
 
         if user:
             from apps.bookings.models import Booking
-            booked_ids = list(Booking.objects.filter(guest=user).values_list('listing_id', flat=True))
-
+            booked_ids = list(
+                Booking.objects.filter(guest=user).values_list('listing_id', flat=True)
+            )
             if booked_ids:
                 last_prop = Property.objects.filter(id__in=booked_ids).last()
                 if last_prop:
@@ -132,11 +172,12 @@ class RecommendationsView(APIView):
                         is_active=True,
                         city=last_prop.city
                     ).exclude(id__in=booked_ids).order_by('-created_at')[:6]
-
                     if similar.count() >= 3:
                         s = PropertyListSerializer(similar, many=True, context={'request': request})
                         return Response({'type': 'personalized', 'properties': s.data})
 
-        top = Property.objects.filter(is_active=True).prefetch_related('reviews', 'images').order_by('-created_at')[:8]
+        top = Property.objects.filter(is_active=True).prefetch_related(
+            'reviews', 'images'
+        ).order_by('-created_at')[:8]
         s = PropertyListSerializer(top, many=True, context={'request': request})
         return Response({'type': 'popular', 'properties': s.data})

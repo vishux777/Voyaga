@@ -14,6 +14,8 @@ class PropertyImageSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if obj.image and request:
             return request.build_absolute_uri(obj.image.url)
+        elif obj.image:
+            return obj.image.url
         return None
 
 
@@ -30,10 +32,24 @@ class PropertyListSerializer(serializers.ModelSerializer):
                   'primary_image_url', 'host_name', 'is_active', 'created_at']
 
     def get_primary_image_url(self, obj):
-        img = obj.primary_image
-        if img and img.image:
-            request = self.context.get('request')
-            return request.build_absolute_uri(img.image.url) if request else img.image.url
+        request = self.context.get('request')
+
+        # Try prefetched images first (fast path)
+        if hasattr(obj, '_prefetched_objects_cache') and 'images' in obj._prefetched_objects_cache:
+            images = obj._prefetched_objects_cache['images']
+            primary = next((i for i in images if i.is_primary), None)
+            if not primary and images:
+                primary = images[0]
+            if primary and primary.image:
+                return request.build_absolute_uri(primary.image.url) if request else primary.image.url
+
+        # Fall back to DB query
+        primary = obj.images.filter(is_primary=True).first()
+        if not primary:
+            primary = obj.images.first()
+        if primary and primary.image:
+            return request.build_absolute_uri(primary.image.url) if request else primary.image.url
+
         return None
 
     def get_host_name(self, obj):
@@ -53,9 +69,15 @@ class PropertyDetailSerializer(PropertyListSerializer):
 class PropertyCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Property
-        fields = ['title', 'description', 'property_type', 'city', 'country', 'address',
-                  'price_per_night', 'max_guests', 'bedrooms', 'bathrooms', 'amenities',
-                  'latitude', 'longitude']
+        fields = [
+            # ── CRITICAL: id must be returned so frontend can upload images ──
+            'id',
+            'title', 'description', 'property_type', 'city', 'country', 'address',
+            'price_per_night', 'max_guests', 'bedrooms', 'bathrooms', 'amenities',
+            'latitude', 'longitude'
+        ]
+        # id is auto-generated, never written by user
+        read_only_fields = ['id']
 
     def create(self, validated_data):
         validated_data['host'] = self.context['request'].user
