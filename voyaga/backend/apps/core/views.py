@@ -19,6 +19,7 @@ class RegisterView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
+        print(f'[CHAT] MISTRAL_API_KEY = "{settings.MISTRAL_API_KEY}"')
         s = RegisterSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         user = s.save()
@@ -99,54 +100,60 @@ class AIChatView(APIView):
 
     def post(self, request):
         message = request.data.get('message', '').strip()
+        history = request.data.get('history', [])
+
         if not message:
             return Response({'error': 'Message required'}, status=400)
 
-        if settings.OPENAI_API_KEY:
+        from apps.properties.models import Property
+        props = Property.objects.filter(is_active=True).values(
+            'title', 'city', 'country', 'price_per_night', 'property_type'
+        )[:8]
+        prop_context = "\n".join([
+            f"- {p['title']} in {p['city']}, {p['country']}: ${p['price_per_night']}/night ({p['property_type']})"
+            for p in props
+        ])
+
+        system_prompt = f"""You are Voya, an intelligent and friendly AI travel assistant for Voyaga — a luxury crypto-powered travel platform.
+
+You help users find properties, plan trips, answer booking questions, and suggest destinations.
+Be concise, warm, and helpful. Use emojis occasionally to keep things friendly.
+
+Available listings on Voyaga right now:
+{prop_context}
+
+Key facts about Voyaga:
+- Bookings are paid via cryptocurrency (BTC, ETH, USDT, SOL, etc.)
+- Users can list their own properties
+- Cancellations give instant refunds
+- Reviews are only from verified guests"""
+
+        if settings.MISTRAL_API_KEY:
             try:
-                from openai import OpenAI
-                from apps.properties.models import Property
-                client = OpenAI(api_key=settings.OPENAI_API_KEY)
-                props = Property.objects.filter(is_active=True).values(
-                    'title', 'city', 'price_per_night', 'property_type'
-                )[:5]
-                prop_context = "\n".join([
-                    f"- {p['title']} in {p['city']}: ${p['price_per_night']}/night ({p['property_type']})"
-                    for p in props
-                ])
-                resp = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": f"You are Voya, a helpful AI travel assistant for Voyaga. Be concise. Available listings:\n{prop_context}"},
-                        {"role": "user", "content": message}
-                    ],
-                    max_tokens=300
+                from mistralai import Mistral
+                client = Mistral(api_key=settings.MISTRAL_API_KEY)
+
+                messages = [{"role": "system", "content": system_prompt}]
+
+                for h in history[-6:]:
+                    if h.get('role') in ('user', 'assistant') and h.get('content'):
+                        messages.append({"role": h['role'], "content": h['content']})
+
+                messages.append({"role": "user", "content": message})
+
+                resp = client.chat.complete(
+                    model="mistral-small-latest",
+                    messages=messages,
+                    max_tokens=400
                 )
                 reply = resp.choices[0].message.content
-            except Exception:
+
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
                 reply = _smart_reply(message)
         else:
             reply = _smart_reply(message)
 
         return Response({'reply': reply})
 
-
-def _smart_reply(message):
-    msg = message.lower()
-    if any(w in msg for w in ['hello', 'hi', 'hey']):
-        return "Hello! I'm Voya, your AI travel assistant. I can help you find the perfect stay, answer questions about bookings, and suggest destinations. What are you looking for?"
-    if any(w in msg for w in ['cheap', 'budget', 'affordable']):
-        return "For budget-friendly stays, filter by price under $80/night. Our studios and apartments offer excellent value!"
-    if any(w in msg for w in ['luxury', 'premium', 'fancy']):
-        return "Our luxury villas and penthouses start from $200/night with stunning amenities. Check out our top-rated properties!"
-    if any(w in msg for w in ['beach', 'ocean', 'sea', 'maldives', 'bali']):
-        return "We have stunning coastal properties! Popular picks: Maldives Overwater Bungalow, Santorini Cliffside Villa, and Ubud Jungle Retreat."
-    if any(w in msg for w in ['book', 'reserve', 'booking']):
-        return "Booking is easy — find a property, pick your dates, and click Reserve. Payment comes from your wallet balance instantly."
-    if any(w in msg for w in ['cancel', 'refund']):
-        return "Cancellations are instant with a full wallet refund. Just visit My Bookings and hit Cancel."
-    if any(w in msg for w in ['payment', 'pay', 'wallet']):
-        return "Voyaga uses a simulated wallet. You start with $500 free. Top up anytime from your dashboard!"
-    if any(w in msg for w in ['review', 'rating']):
-        return "Only guests who completed a stay can leave reviews — keeping ratings 100% authentic."
-    return "I'm Voya, your travel assistant! Ask me about destinations, prices, or how to book. How can I help?"

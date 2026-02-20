@@ -8,6 +8,7 @@ import urllib.request
 import urllib.error
 import json
 import time
+import uuid
 from .models import Transaction
 from apps.core.models import AuditLog
 
@@ -244,3 +245,52 @@ class NOWPaymentsCurrenciesView(APIView):
             return Response({'currencies': currencies})
         except ValueError:
             return Response({'currencies': ['btc', 'eth', 'usdt', 'ltc', 'bnb', 'sol', 'doge']})
+        import uuid
+
+class WithdrawView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        try:
+            amount = float(request.data.get('amount', 0))
+        except (TypeError, ValueError):
+            return Response({'error': 'Invalid amount'}, status=400)
+
+        currency = request.data.get('currency', '').strip()
+        address  = request.data.get('address', '').strip()
+
+        if amount < 10:
+            return Response({'error': 'Minimum withdrawal is $10'}, status=400)
+        if not address:
+            return Response({'error': 'Wallet address is required'}, status=400)
+
+        user = request.user
+        if float(user.wallet_balance) < amount:
+            return Response({'error': 'Insufficient balance'}, status=400)
+
+        from decimal import Decimal
+        user.wallet_balance -= Decimal(str(amount))
+        user.save()
+
+        reference = 'WD-' + str(uuid.uuid4()).upper()[:12]
+
+        Transaction.objects.create(
+            user=user,
+            amount=-amount,
+            transaction_type='withdrawal',
+            description=f'Withdrawal to {currency.upper()} wallet ({address[:12]}...)',
+            status='pending'
+        )
+
+        AuditLog.log(user, 'withdrawal_requested', {
+            'amount': amount,
+            'currency': currency,
+            'address': address,
+            'reference': reference
+        })
+
+        return Response({
+            'message': 'Withdrawal requested successfully',
+            'reference': reference,
+            'new_balance': float(user.wallet_balance)
+        })

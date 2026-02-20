@@ -19,4 +19,5 @@ urlpatterns = [
     path('bookings', T(template_name='bookings.html'), name='bookings'),
     path('about', T(template_name='about.html'), name='about'),
     path('profile', T(template_name='profile.html'), name='profile'),
+    path('list-property', T(template_name='list_property.html'), name='list_property'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

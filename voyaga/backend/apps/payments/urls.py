@@ -8,4 +8,5 @@ urlpatterns = [
     path('nowpayments/create/', views.NOWPaymentsCreateView.as_view()),
     path('nowpayments/status/<str:payment_id>/', views.NOWPaymentsStatusView.as_view()),
     path('nowpayments/currencies/', views.NOWPaymentsCurrenciesView.as_view()),
+    path('withdraw/', views.WithdrawView.as_view()),
 ]

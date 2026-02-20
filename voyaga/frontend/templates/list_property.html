@@ -1,0 +1,224 @@
+{% extends 'base.html' %}
+{% block title %}List Your Property — Voyaga{% endblock %}
+{% block content %}
+
+<div class="page-container">
+  <div class="list-wrap">
+
+    <div class="list-header">
+      <div class="section-badge">✦ Become a Host</div>
+      <h1 class="list-title">List your property</h1>
+      <p class="list-sub">Share your space with travelers from around the world and start earning.</p>
+    </div>
+
+    <form id="listForm" onsubmit="submitListing(event)">
+
+      <div class="list-section">
+        <h3>Basic Info</h3>
+        <div class="form-group">
+          <label>Property Title *</label>
+          <input type="text" id="lpTitle" placeholder="e.g. Cozy Beachfront Villa in Bali" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Property Type *</label>
+            <select id="lpType" required>
+              <option value="">Select type</option>
+              <option value="apartment">Apartment</option>
+              <option value="house">House</option>
+              <option value="villa">Villa</option>
+              <option value="cabin">Cabin</option>
+              <option value="studio">Studio</option>
+              <option value="penthouse">Penthouse</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Price per Night (USD) *</label>
+            <input type="number" id="lpPrice" placeholder="e.g. 120" min="1" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Description *</label>
+          <textarea id="lpDesc" rows="4" placeholder="Describe your property — highlight what makes it special..." required></textarea>
+        </div>
+      </div>
+
+      <div class="list-section">
+        <h3>Location</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>City *</label>
+            <input type="text" id="lpCity" placeholder="e.g. Bali" required>
+          </div>
+          <div class="form-group">
+            <label>Country *</label>
+            <input type="text" id="lpCountry" placeholder="e.g. Indonesia" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Full Address *</label>
+          <input type="text" id="lpAddress" placeholder="e.g. Jl. Raya Ubud, Bali 80571" required>
+        </div>
+      </div>
+
+      <div class="list-section">
+        <h3>Details</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Max Guests *</label>
+            <input type="number" id="lpGuests" value="2" min="1" max="20" required>
+          </div>
+          <div class="form-group">
+            <label>Bedrooms *</label>
+            <input type="number" id="lpBedrooms" value="1" min="0" max="20" required>
+          </div>
+          <div class="form-group">
+            <label>Bathrooms *</label>
+            <input type="number" id="lpBathrooms" value="1" min="0" max="20" required>
+          </div>
+        </div>
+      </div>
+
+      <div class="list-section">
+        <h3>Amenities</h3>
+        <div class="amenity-checks">
+          <label class="amenity-check"><input type="checkbox" value="wifi"> 📶 WiFi</label>
+          <label class="amenity-check"><input type="checkbox" value="pool"> 🏊 Pool</label>
+          <label class="amenity-check"><input type="checkbox" value="gym"> 💪 Gym</label>
+          <label class="amenity-check"><input type="checkbox" value="parking"> 🚗 Parking</label>
+          <label class="amenity-check"><input type="checkbox" value="kitchen"> 🍳 Kitchen</label>
+          <label class="amenity-check"><input type="checkbox" value="ac"> ❄️ AC</label>
+          <label class="amenity-check"><input type="checkbox" value="heating"> 🔥 Heating</label>
+          <label class="amenity-check"><input type="checkbox" value="tv"> 📺 TV</label>
+          <label class="amenity-check"><input type="checkbox" value="washer"> 🧺 Washer</label>
+          <label class="amenity-check"><input type="checkbox" value="balcony"> 🌅 Balcony</label>
+        </div>
+      </div>
+
+      <div class="list-section">
+        <h3>Photos</h3>
+        <p class="tab-desc">Upload photos of your property (JPG, PNG — max 5MB each)</p>
+        <div class="upload-area" id="uploadArea" onclick="document.getElementById('lpImages').click()">
+          <div class="upload-icon">📸</div>
+          <div class="upload-text">Click to upload photos</div>
+          <div class="upload-sub">or drag and drop</div>
+          <input type="file" id="lpImages" multiple accept="image/*" style="display:none" onchange="previewImages(this)">
+        </div>
+        <div class="image-previews" id="imagePreviews"></div>
+      </div>
+
+      <div id="listMsg" class="hidden" style="margin-bottom:1rem;"></div>
+
+      <button type="submit" class="btn-primary w-full" id="listBtn" style="font-size:1rem;padding:14px;">
+        ✦ Publish Listing
+      </button>
+    </form>
+
+  </div>
+</div>
+
+<style>
+.list-wrap { max-width: 720px; margin: 0 auto; padding: 2rem 1rem 4rem; }
+.list-header { text-align: center; margin-bottom: 2.5rem; }
+.list-title { font-size: 2.2rem; margin: 0.5rem 0; }
+.list-sub { color: var(--text2); font-size: 0.95rem; }
+.list-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); padding: 1.5rem; margin-bottom: 1.2rem; }
+.list-section h3 { font-size: 0.95rem; margin-bottom: 1.2rem; color: var(--gold); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.78rem; }
+.amenity-checks { display: flex; flex-wrap: wrap; gap: 10px; }
+.amenity-check { display: flex; align-items: center; gap: 7px; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 7px 14px; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; user-select: none; }
+.amenity-check:hover { border-color: var(--gold); }
+.amenity-check input { accent-color: var(--gold); width: 14px; height: 14px; }
+.amenity-check:has(input:checked) { border-color: var(--gold); color: var(--gold); background: var(--gold-glow); }
+.upload-area { border: 2px dashed var(--border); border-radius: var(--r2); padding: 2.5rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+.upload-area:hover { border-color: var(--gold); }
+.upload-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+.upload-text { font-size: 0.95rem; margin-bottom: 4px; }
+.upload-sub { font-size: 0.8rem; color: var(--text2); }
+.image-previews { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 1rem; }
+.img-preview { width: 90px; height: 90px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); }
+</style>
+
+{% endblock %}
+{% block scripts %}
+<script>
+if (!getToken()) window.location.href = '/';
+
+function previewImages(input) {
+  const container = document.getElementById('imagePreviews');
+  container.innerHTML = '';
+  Array.from(input.files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      img.className = 'img-preview';
+      container.appendChild(img);
+    };
+    reader.readAsDataURL(file);
+  });
+  document.getElementById('uploadArea').style.borderColor = 'var(--gold)';
+}
+
+async function submitListing(e) {
+  e.preventDefault();
+
+  const amenities = Array.from(
+    document.querySelectorAll('.amenity-check input:checked')
+  ).map(i => i.value);
+
+  const btn = document.getElementById('listBtn');
+  btn.disabled = true;
+  btn.textContent = 'Publishing...';
+
+  const token = getToken();
+  const payload = {
+    title:          document.getElementById('lpTitle').value,
+    property_type:  document.getElementById('lpType').value,
+    price_per_night: parseFloat(document.getElementById('lpPrice').value),
+    description:    document.getElementById('lpDesc').value,
+    city:           document.getElementById('lpCity').value,
+    country:        document.getElementById('lpCountry').value,
+    address:        document.getElementById('lpAddress').value,
+    max_guests:     parseInt(document.getElementById('lpGuests').value),
+    bedrooms:       parseInt(document.getElementById('lpBedrooms').value),
+    bathrooms:      parseInt(document.getElementById('lpBathrooms').value),
+    amenities:      amenities,
+  };
+
+  const result = await api('/api/properties/create/', 'POST', payload);
+
+  if (!result || result.id === undefined) {
+    btn.disabled = false;
+    btn.textContent = '✦ Publish Listing';
+    return;
+  }
+
+  // Upload images if any
+  const files = document.getElementById('lpImages').files;
+  if (files.length > 0 && result.id) {
+    const formData = new FormData();
+    Array.from(files).forEach(f => formData.append('images', f));
+
+    await fetch(`/api/properties/${result.id}/images/`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+      body: formData
+    });
+  }
+
+  const msg = document.getElementById('listMsg');
+  msg.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--green);border-radius:12px;padding:1rem;text-align:center;">
+      <div style="font-size:1.5rem;margin-bottom:6px;">🎉</div>
+      <div style="font-weight:700;margin-bottom:4px;">Property Listed Successfully!</div>
+      <div style="color:var(--text2);font-size:0.85rem;margin-bottom:1rem;">Your property is now live on Voyaga.</div>
+      <a href="/property/${result.id}" style="color:var(--gold);font-size:0.88rem;">View your listing →</a>
+    </div>`;
+  msg.classList.remove('hidden');
+  btn.disabled = false;
+  btn.textContent = '✦ Publish Listing';
+
+  setTimeout(() => window.location.href = `/property/${result.id}`, 2500);
+}
+</script>
+{% endblock %}

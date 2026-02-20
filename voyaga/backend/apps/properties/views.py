@@ -65,12 +65,12 @@ class PropertyCreateView(generics.CreateAPIView):
         return ctx
 
     def perform_create(self, serializer):
-        if self.request.user.role != 'host':
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("Only hosts can create listings.")
+        user = self.request.user
+        # Auto-upgrade to host role when they list a property
+        if user.role != 'host':
+            user.role = 'host'
+            user.save()
         serializer.save()
-
-
 class PropertyUpdateView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = PropertyCreateSerializer
     permission_classes = [permissions.IsAuthenticated]

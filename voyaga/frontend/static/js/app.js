@@ -13,7 +13,6 @@ function setAuth(data) {
   localStorage.setItem('voyaga_refresh', data.tokens.refresh);
   localStorage.setItem('voyaga_user', JSON.stringify(data.user));
   updateNavUI(data.user);
-  fetchAndUpdateWallet();
 }
 
 function logout() {
@@ -33,7 +32,6 @@ function updateNavUI(user) {
     actions.classList.add('hidden');
     navUser.classList.remove('hidden');
     document.getElementById('userAvatar').textContent = (user.first_name?.[0] || user.email[0]).toUpperCase();
-    document.getElementById('walletAmount').textContent = '$' + (parseFloat(user.wallet_balance) || 0).toFixed(2);
   } else {
     actions.classList.remove('hidden');
     navUser.classList.add('hidden');
@@ -41,7 +39,6 @@ function updateNavUI(user) {
 }
 
 // ── API ───────────────────────────────────
-// silent=true → no toast on error (for background GET requests like loading listings)
 async function api(url, method = 'GET', body = null, silent = false) {
   const headers = { 'Content-Type': 'application/json' };
   const token = getToken();
@@ -60,7 +57,6 @@ async function api(url, method = 'GET', body = null, silent = false) {
       return null;
     }
 
-    // Handle non-JSON or empty responses
     const text = await res.text();
     if (!text) return res.ok ? {} : null;
 
@@ -74,7 +70,6 @@ async function api(url, method = 'GET', body = null, silent = false) {
     }
     return data;
   } catch (err) {
-    // Only show network error for user-triggered actions (POST/PUT/DELETE), not background GETs
     if (!silent && method !== 'GET') {
       showToast('Cannot connect to server. Is Django running?', 'error');
     }
@@ -148,7 +143,6 @@ async function handleLogin(e) {
     hideModal('loginModal');
     showToast(`Welcome back, ${result.user.first_name || result.user.username}! 👋`, 'success');
     document.getElementById('loginForm').reset();
-    // Reload page data after login
     if (typeof loadRecommended === 'function') loadRecommended();
     if (typeof loadProperties === 'function') loadProperties();
   }
@@ -227,6 +221,8 @@ function propertyCard(p) {
 }
 
 // ── AI CHAT ───────────────────────────────
+let chatHistory = [];
+
 function toggleChat() {
   const panel = document.getElementById('chatPanel');
   panel.classList.toggle('hidden');
@@ -247,15 +243,29 @@ async function sendChat() {
   appendMsg(msg, 'user');
 
   if (!getToken()) {
-    appendMsg("Please sign in to chat with Voya AI! Click **Sign in** in the top right. 👋", 'ai');
+    appendMsg("Please sign in to chat with Voya AI! Click Sign in in the top right. 👋", 'ai');
     return;
   }
 
+  chatHistory.push({ role: 'user', content: msg });
+
   showThinking(true);
-  const result = await api('/api/auth/chat/', 'POST', { message: msg });
+
+  const result = await api('/api/auth/chat/', 'POST', {
+    message: msg,
+    history: chatHistory
+  });
+
   showThinking(false);
-  if (result) appendMsg(result.reply, 'ai');
-  else appendMsg("Sorry, I had trouble connecting. Please try again!", 'ai');
+
+  if (result?.reply) {
+    appendMsg(result.reply, 'ai');
+    chatHistory.push({ role: 'assistant', content: result.reply });
+    // Keep last 20 messages to avoid token bloat
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+  } else {
+    appendMsg("Sorry, I had trouble connecting. Please try again!", 'ai');
+  }
 }
 
 function appendMsg(text, role) {
@@ -268,7 +278,8 @@ function appendMsg(text, role) {
 }
 
 function showThinking(show) {
-  document.getElementById('thinkingIndicator').classList.toggle('hidden', !show);
+  const el = document.getElementById('thinkingIndicator');
+  if (el) el.classList.toggle('hidden', !show);
 }
 
 // ── NAVBAR SCROLL ─────────────────────────
@@ -277,11 +288,7 @@ window.addEventListener('scroll', () => {
   if (nav) nav.classList.toggle('scrolled', window.scrollY > 50);
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-  const user = getUser();
-  updateNavUI(user);
-  if (user) fetchAndUpdateWallet();
-});
+// ── DROPDOWN ──────────────────────────────
 function toggleDropdown() {
   const dd = document.getElementById('userDropdown');
   if (dd) dd.classList.toggle('open');
@@ -294,31 +301,9 @@ document.addEventListener('click', function(e) {
     dd.classList.remove('open');
   }
 });
-async function refreshWallet() {
-  const data = await api('/api/payments/wallet/');
-  if (data) {
-    const amount = '$' + parseFloat(data.balance).toFixed(2);
-    const badge = document.getElementById('walletAmount');
-    if (badge) badge.textContent = amount;
-    const user = getUser();
-    if (user) {
-      user.wallet_balance = data.balance;
-      localStorage.setItem('voyaga_user', JSON.stringify(user));
-    }
-  }
-}
-async function fetchAndUpdateWallet() {
-  try {
-    const data = await api('/api/payments/wallet/');
-    if (data) {
-      const formatted = '$' + parseFloat(data.balance).toFixed(2);
-      const badge = document.getElementById('walletAmount');
-      if (badge) badge.textContent = formatted;
-      const user = getUser();
-      if (user) {
-        user.wallet_balance = data.balance;
-        localStorage.setItem('voyaga_user', JSON.stringify(user));
-      }
-    }
-  } catch (e) {}
-}
+
+// ── INIT ──────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const user = getUser();
+  updateNavUI(user);
+});

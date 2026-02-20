@@ -32,3 +32,11 @@ class Transaction(models.Model):
 
     def __str__(self):
         return f"{self.user.email} | {self.transaction_type} | ${self.amount}"
+    
+    transaction_type = models.CharField(max_length=30, choices=[
+    ('wallet_topup', 'Wallet Top-up'),
+    ('booking_payment', 'Booking Payment'),
+    ('refund', 'Refund'),
+    ('host_payout', 'Host Payout'),
+    ('withdrawal', 'Withdrawal'),
+], default='wallet_topup')
