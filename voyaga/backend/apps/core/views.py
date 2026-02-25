@@ -355,7 +355,7 @@ class AIChatView(APIView):
                     "* Platinum (5,000 pts) - 10% off all bookings\n\n"
                     "Earn **1 point per $1 spent**. Points never expire and discounts apply automatically at checkout!")
 
-        # My bookings
+    
         if any(w in msg for w in ["my booking", "my trip", "my stay", "my reservation", "past booking", "booking history", "where have i stayed"]):
             if u["bookings"]:
                 lines = ["* " + b for b in u["bookings"]]
@@ -364,7 +364,7 @@ class AIChatView(APIView):
             return ("You have no bookings yet! Browse our **" + str(stats["active_props"]) +
                     " properties** at /properties to plan your first trip!")
 
-        # Wishlist
+        
         if any(w in msg for w in ["wishlist", "saved", "favourite", "favorite", "heart", "saved properties", "liked"]):
             if u["wishlist"]:
                 return ("**Your wishlist (" + str(len(u["wishlist"])) + " saved properties):**\n\n" +
